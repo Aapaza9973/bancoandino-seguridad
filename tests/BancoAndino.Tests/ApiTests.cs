@@ -57,6 +57,20 @@ public class ApiTests : IClassFixture<Fabrica>
     }
 
     [Fact]
+    public async Task Salud_exige_token_y_responde_con_sesion()
+    {
+        var anonimo = _fabrica.CreateClient();
+        var sinToken = await anonimo.GetAsync("/api/salud");
+        Assert.Equal(HttpStatusCode.Unauthorized, sinToken.StatusCode);
+
+        // Con sesión sigue sirviendo de diagnóstico.
+        var c = await ClienteConAsync(_fabrica, "ana", "Cajero_Ana_2027#");
+        var conToken = await c.GetAsync("/api/salud");
+        Assert.Equal(HttpStatusCode.OK, conToken.StatusCode);
+        Assert.False(string.IsNullOrWhiteSpace((await JsonAsync(conToken)).GetProperty("motor").GetString()));
+    }
+
+    [Fact]
     public async Task Cajero_ve_los_datos_pero_no_puede_descifrar_la_tarjeta()
     {
         var c = await ClienteConAsync(_fabrica, "ana", "Cajero_Ana_2027#");

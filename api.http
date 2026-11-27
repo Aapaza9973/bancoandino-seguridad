@@ -4,9 +4,6 @@
 
 @host = http://127.0.0.1:5080
 
-### Salud del servicio
-GET {{host}}/api/salud
-
 ### Login como cajero (sin permisos sobre la clave de cifrado)
 # @name login
 POST {{host}}/api/login
@@ -36,6 +33,10 @@ Content-Type: application/json
   "usuario": "admin",
   "password": "Dba_Admin_2027#"
 }
+
+### Salud del servicio: requiere token (sin Authorization devuelve 401)
+GET {{host}}/api/salud
+Authorization: Bearer {{login.response.body.$.token}}
 
 ### Sesión actual: usuario, rol, permisos y UNMASK
 GET {{host}}/api/sesion

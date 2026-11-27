@@ -589,8 +589,12 @@ app.MapPost("/api/columnas/descifrar", async (TarjetaIdDto dto, HttpContext ctx)
     }
 });
 
-app.MapGet("/api/salud", async () =>
+// El diagnóstico de la base no se publica: expone el login de conexión y la versión del motor.
+app.MapGet("/api/salud", async (HttpContext ctx) =>
 {
+    var s = SesionDe(ctx);
+    if (s is null) return Results.Json(new { error = "No autenticado." }, statusCode: 401);
+
     var f = await ConsultaAsync("SELECT DB_NAME() AS base, SUSER_SNAME() AS conexion, @@VERSION AS motor;");
     return Results.Ok(f[0]);
 });
