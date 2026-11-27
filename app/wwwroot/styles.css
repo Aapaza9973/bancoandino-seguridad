@@ -602,5 +602,126 @@ code {
 
 @media (max-width: 560px) {
   .marca strong { display: none; }
-  .chip { max-width: 15ch; }
+  .chip { max-width: 18ch; }
+}
+
+/* =========================================================
+   Ajustes de mesa
+   Columnas de acción siempre a la vista, fichas con etiqueta
+   encima y renglones de datos apilados en pantalla angosta.
+   ========================================================= */
+
+/* el título no se descuelga cuando ocupa dos líneas */
+.card h3 { align-items: flex-start; }
+.card h3::before { margin-top: 0.42em; }
+
+/* la columna de acciones queda a la vista aunque la tabla desborde */
+.datos .acciones {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--hoja);
+  white-space: nowrap;
+  border-left: 1px solid var(--regla);
+  box-shadow: -8px 0 10px -9px rgba(22, 33, 28, 0.55);
+}
+.datos th.acciones { background: var(--hoja-2); z-index: 2; }
+table.datos tbody tr:hover td.acciones { background: var(--hoja-2); }
+.datos .acciones button + button { margin-left: 6px; }
+
+/* tablas largas: renglón con scroll propio y encabezado fijo */
+.tabla-wrap.alta { max-height: 21rem; }
+
+/* ficha: etiqueta encima del control, como un formulario rellenado */
+.fichas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 200px));
+  justify-content: start;
+  align-items: end;
+  gap: 12px;
+  margin-top: 16px;
+}
+.fichas .campo { display: grid; gap: 4px; min-width: 0; }
+.fichas .campo label { margin: 0; }
+.fichas select, .fichas input { width: 100%; min-width: 0; }
+.fichas button.primary { margin-top: 0; justify-self: start; }
+
+/* texto corrido dentro de una ficha: se lee como acta, no como dato */
+.kv.prosa div { grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.kv.prosa span:last-child {
+  font-family: var(--texto);
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--tinta-2);
+}
+
+/* aviso de una orden ejecutada por el motor */
+.aviso {
+  padding: 9px 12px;
+  font-family: var(--datos);
+  font-size: 0.76rem;
+  color: var(--tinta);
+  background: rgba(30, 91, 68, 0.06);
+  border: 1px solid var(--regla-fuerte);
+  border-left: 3px solid var(--verde);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* cantos delgados, como el borde de un libro */
+.nav, .tabla-wrap { scrollbar-width: thin; }
+
+@media (max-width: 560px) {
+  .kv div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .kv span:last-child { text-align: left; }
+  .fichas { grid-template-columns: minmax(0, 1fr); justify-content: stretch; }
+  .tabla-wrap.alta { max-height: none; }
+
+  /* tablas del expediente: cada fila se lee como una ficha, sin desborde */
+  table.datos.apilada thead { display: none; }
+  table.datos.apilada,
+  table.datos.apilada tbody,
+  table.datos.apilada tr,
+  table.datos.apilada td { display: block; width: 100%; }
+  table.datos.apilada tr {
+    padding: 10px 12px;
+    border-top: 1px solid var(--regla-fuerte);
+  }
+  table.datos.apilada tbody tr:first-child { border-top: 0; }
+  table.datos.apilada td {
+    display: grid;
+    grid-template-columns: 6.4rem minmax(0, 1fr);
+    gap: 10px;
+    padding: 3px 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border: 0;
+    text-align: left;
+  }
+  table.datos.apilada td::before {
+    content: attr(data-col);
+    font-family: var(--display);
+    font-size: 0.58rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--tinta-3);
+    padding-top: 2px;
+  }
+  table.datos.apilada td.acciones {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 7px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  table.datos.apilada td.acciones::before { content: none; }
+  table.datos.apilada td.acciones button + button { margin-left: 0; }
+  table.datos.apilada td.nulo { grid-template-columns: minmax(0, 1fr); }
+  table.datos.apilada td.nulo::before { content: none; }
+  table.datos.apilada tr:hover td { background: transparent; }
+  table.datos.apilada tbody tr:hover td.acciones { background: transparent; }
 }

@@ -1,4 +1,5 @@
 const state = { token: sessionStorage.getItem("token"), sesion: null };
+let avisoAdmin = "";
 
 const $ = (sel) => document.querySelector(sel);
 const esc = (v) =>
@@ -42,6 +43,7 @@ $("#btn-salir").addEventListener("click", async () => {
   sessionStorage.removeItem("token");
   state.token = null;
   state.sesion = null;
+  avisoAdmin = "";
   $("#app").hidden = true;
   $("#login").hidden = false;
   $("#password").value = "";
@@ -60,6 +62,7 @@ async function iniciar() {
   $("#login").hidden = true;
   $("#app").hidden = false;
   $("#chip-usuario").textContent = `${s.nombre} · ${s.rol}`;
+  $("#chip-usuario").title = `${s.nombre} · ${s.rol} · principal ${s.principal}`;
   $("#ctx-linea").textContent = `Consultando como ${s.principal} (usuario de la base) · ${s.unmask ? "con UNMASK" : "sin UNMASK"}`;
   pintarNav();
   ir("resumen");
@@ -91,9 +94,14 @@ function marcarNav(vista) {
   $("#nav").querySelectorAll("button").forEach((b) =>
     b.classList.toggle("activo", b.dataset.vista === vista)
   );
+  const nav = $("#nav");
+  const activo = nav.querySelector("button.activo");
+  if (activo && nav.scrollWidth > nav.clientWidth)
+    activo.scrollIntoView({ block: "nearest", inline: "center" });
 }
 
 function ir(vista) {
+  if (vista !== "administracion") avisoAdmin = "";
   marcarNav(vista);
   if (vista === "resumen") return vistaResumen();
   if (vista === "auditoria") return vistaAuditoria();
@@ -235,113 +243,143 @@ async function vistaAdmin() {
     return;
   }
 
-  const opcionesPrincipal = d.usuarios.map((u) => `<option value="${esc(u.principal)}">${esc(u.principal)} (${esc(u.tipo)})</option>`).join("");
+  const opcionesPrincipal = d.usuarios.map((u) => `<option value="${esc(u.principal)}">${esc(u.principal)}</option>`).join("");
   const opcionesTabla = ["clientes", "transacciones", "empleados"]
     .map((t) => `<option value="${t}">${t}</option>`)
     .join("");
 
   $("#vista").innerHTML = `
+    ${avisoAdmin ? `<div class="aviso">${esc(avisoAdmin)}</div>` : ""}
     <div class="card">
       <h3>Máscaras activas</h3>
       <p class="muted">Leídas de <span class="mono">sys.masked_columns</span>. Al quitarlas, el usuario ve el dato real.</p>
       <div class="tabla-wrap" style="margin-top: 12px">
-        <table class="datos">
-          <thead><tr><th>Tabla</th><th>Columna</th><th>Función</th><th></th></tr></thead>
+        <table class="datos apilada">
+          <thead><tr><th>Tabla</th><th>Columna</th><th>Función</th><th class="acciones"></th></tr></thead>
           <tbody>
             ${d.mascaras
               .map(
                 (m) => `<tr>
-                  <td>${esc(m.tabla)}</td><td>${esc(m.columna)}</td>
-                  <td class="mono">${esc(m.funcion)}</td>
-                  <td><button class="ghost mini" data-quitar="${esc(m.tabla)}|${esc(m.columna)}">Quitar</button></td>
+                  <td data-col="Tabla">${esc(m.tabla)}</td>
+                  <td data-col="Columna">${esc(m.columna)}</td>
+                  <td data-col="Función" class="mono">${esc(m.funcion)}</td>
+                  <td class="acciones"><button class="ghost mini" data-quitar="${esc(m.tabla)}|${esc(m.columna)}">Quitar</button></td>
                 </tr>`
               )
               .join("")}
           </tbody>
         </table>
       </div>
-      <div class="row" style="margin-top: 12px">
-        <select id="m-tabla"><option value="Clientes">Clientes</option><option value="Empleados">Empleados</option></select>
-        <select id="m-columna">
-          ${["NumeroTarjeta", "Email", "Telefono", "SaldoCuenta", "CI"].map((c) => `<option>${c}</option>`).join("")}
-        </select>
-        <select id="m-funcion">
-          <option value="default()">default()</option>
-          <option value="email()">email()</option>
-          <option value="partial(0,&quot;XXXX-XXXX-XXXX-&quot;,4)">partial tarjeta</option>
-          <option value="partial(0,&quot;XXXX&quot;,4)">partial últimos 4</option>
-          <option value="partial(2,&quot;XXXXXXX&quot;,0)">partial primeros 2</option>
-          <option value="random(1, 9999)">random(1,9999)</option>
-        </select>
-        <button class="primary mini" id="m-aplicar">Aplicar máscara</button>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <div class="card">
-        <h3>Permisos por principal</h3>
-        <div class="row" style="margin-top: 10px">
-          <select id="p-principal">${opcionesPrincipal}</select>
-          <select id="p-tabla">${opcionesTabla}</select>
-          <select id="p-permiso"><option>SELECT</option><option>INSERT</option><option>UPDATE</option><option>DELETE</option></select>
-          <select id="p-accion"><option>GRANT</option><option>DENY</option><option>REVOKE</option></select>
-          <button class="primary mini" id="p-aplicar">Ejecutar</button>
+      <div class="fichas">
+        <div class="campo">
+          <label for="m-tabla">Tabla</label>
+          <select id="m-tabla"><option value="Clientes">Clientes</option><option value="Empleados">Empleados</option></select>
         </div>
-        <div class="tabla-wrap" style="margin-top: 14px">
-          <table class="datos">
-            <thead><tr><th>Principal</th><th>Permiso</th><th>Estado</th><th>Objeto</th></tr></thead>
-            <tbody>
-              ${d.permisos
-                .map(
-                  (p) => `<tr><td>${esc(p.principal)}</td><td>${esc(p.permiso)}</td>
-                  <td>${esc(p.estado)}</td><td class="mono">${esc(p.objeto)}</td></tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
+        <div class="campo">
+          <label for="m-columna">Columna</label>
+          <select id="m-columna">
+            ${["NumeroTarjeta", "Email", "Telefono", "SaldoCuenta", "CI"].map((c) => `<option>${c}</option>`).join("")}
+          </select>
         </div>
-      </div>
-
-      <div class="card">
-        <h3>Usuarios de la aplicación</h3>
-        <p class="muted">El principal de base decide qué puede hacer cada uno.</p>
-        <div class="tabla-wrap" style="margin-top: 12px">
-          <table class="datos">
-            <thead><tr><th>Usuario</th><th>Principal BD</th><th>Rol</th><th>Activo</th><th></th></tr></thead>
-            <tbody>
-              ${d.appUsuarios
-                .map(
-                  (u) => `<tr>
-                    <td>${esc(u.Usuario)}</td><td class="mono">${esc(u.PrincipalBD)}</td>
-                    <td>${esc(u.Rol)}</td>
-                    <td><span class="badge ${u.Activo ? "ok" : "no"}">${u.Activo ? "sí" : "no"}</span></td>
-                    <td><button class="ghost mini" data-toggle="${esc(u.Usuario)}" data-activo="${u.Activo ? "1" : "0"}">
-                      ${u.Activo ? "Desactivar" : "Activar"}</button></td>
-                  </tr>`
-                )
-                .join("")}
-            </tbody>
-          </table>
+        <div class="campo">
+          <label for="m-funcion">Función</label>
+          <select id="m-funcion">
+            <option value="default()">default()</option>
+            <option value="email()">email()</option>
+            <option value="partial(0,&quot;XXXX-XXXX-XXXX-&quot;,4)">partial tarjeta</option>
+            <option value="partial(0,&quot;XXXX&quot;,4)">partial últimos 4</option>
+            <option value="partial(2,&quot;XXXXXXX&quot;,0)">partial primeros 2</option>
+            <option value="random(1, 9999)">random(1,9999)</option>
+          </select>
+        </div>
+        <div class="campo">
+          <button class="primary mini" id="m-aplicar">Aplicar máscara</button>
         </div>
       </div>
     </div>
 
     <div class="card">
-      <h3>Roles y sus miembros</h3>
-      <div class="tabla-wrap">
-        <table class="datos">
-          <thead><tr><th>Principal</th><th>Tipo</th><th>Rol</th></tr></thead>
+      <h3>Permisos por principal</h3>
+      <p class="muted">El GRANT, DENY o REVOKE lo ejecuta el motor; el efecto aparece al volver a Clientes o Empleados.</p>
+      <div class="fichas">
+        <div class="campo">
+          <label for="p-principal">Principal</label>
+          <select id="p-principal">${opcionesPrincipal}</select>
+        </div>
+        <div class="campo">
+          <label for="p-tabla">Tabla</label>
+          <select id="p-tabla">${opcionesTabla}</select>
+        </div>
+        <div class="campo">
+          <label for="p-permiso">Permiso</label>
+          <select id="p-permiso"><option>SELECT</option><option>INSERT</option><option>UPDATE</option><option>DELETE</option></select>
+        </div>
+        <div class="campo">
+          <label for="p-accion">Acción</label>
+          <select id="p-accion"><option>GRANT</option><option>DENY</option><option>REVOKE</option></select>
+        </div>
+        <div class="campo">
+          <button class="primary mini" id="p-aplicar">Ejecutar</button>
+        </div>
+      </div>
+      <div class="tabla-wrap alta" style="margin-top: 14px">
+        <table class="datos apilada">
+          <thead><tr><th>Principal</th><th>Permiso</th><th>Estado</th><th>Objeto</th></tr></thead>
           <tbody>
-            ${d.usuarios
-              .map((u) => `<tr><td>${esc(u.principal)}</td><td>${esc(u.tipo)}</td><td>${esc(u.rol)}</td></tr>`)
+            ${d.permisos
+              .map(
+                (p) => `<tr><td data-col="Principal">${esc(p.principal)}</td>
+                <td data-col="Permiso">${esc(p.permiso)}</td>
+                <td data-col="Estado">${esc(p.estado)}</td>
+                <td data-col="Objeto" class="mono">${esc(p.objeto)}</td></tr>`
+              )
               .join("")}
           </tbody>
         </table>
       </div>
     </div>
-    <p class="muted" id="admin-msg"></p>`;
 
-  const msg = (t) => ($("#admin-msg").textContent = t);
+    <div class="card">
+      <h3>Usuarios de la aplicación</h3>
+      <p class="muted">El principal de base decide qué puede hacer cada uno.</p>
+      <div class="tabla-wrap" style="margin-top: 12px">
+        <table class="datos apilada">
+          <thead><tr><th>Usuario</th><th>Principal BD</th><th>Rol</th><th>Activo</th><th class="acciones"></th></tr></thead>
+          <tbody>
+            ${d.appUsuarios
+              .map(
+                (u) => `<tr>
+                  <td data-col="Usuario">${esc(u.Usuario)}</td>
+                  <td data-col="Principal BD" class="mono">${esc(u.PrincipalBD)}</td>
+                  <td data-col="Rol">${esc(u.Rol)}</td>
+                  <td data-col="Activo"><span class="badge ${u.Activo ? "ok" : "no"}">${u.Activo ? "sí" : "no"}</span></td>
+                  <td class="acciones"><button class="ghost mini" data-toggle="${esc(u.Usuario)}" data-activo="${u.Activo ? "1" : "0"}">
+                    ${u.Activo ? "Desactivar" : "Activar"}</button></td>
+                </tr>`
+              )
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Roles y sus miembros</h3>
+      <div class="tabla-wrap alta">
+        <table class="datos apilada">
+          <thead><tr><th>Principal</th><th>Tipo</th><th>Rol</th></tr></thead>
+          <tbody>
+            ${d.usuarios
+              .map((u) => `<tr><td data-col="Principal">${esc(u.principal)}</td>
+              <td data-col="Tipo">${esc(u.tipo)}</td>
+              <td data-col="Rol">${esc(u.rol)}</td></tr>`)
+              .join("")}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const anunciar = (t) => { avisoAdmin = t; };
 
   $("#m-aplicar").addEventListener("click", async () => {
     try {
@@ -349,9 +387,9 @@ async function vistaAdmin() {
         method: "POST",
         body: JSON.stringify({ tabla: $("#m-tabla").value, columna: $("#m-columna").value, funcion: $("#m-funcion").value }),
       });
-      msg(`Ejecutado: ${r.ejecutado}`);
-      vistaAdmin();
-    } catch (ex) { msg(ex.message); }
+      anunciar(`Ejecutado en el motor: ${r.ejecutado}`);
+      await vistaAdmin();
+    } catch (ex) { anunciar(`El motor rechazó la orden: ${ex.message}`); await vistaAdmin(); }
   });
 
   $("#vista").querySelectorAll("[data-quitar]").forEach((b) =>
@@ -359,9 +397,9 @@ async function vistaAdmin() {
       const [tabla, columna] = b.dataset.quitar.split("|");
       try {
         const r = await api("/api/admin/mascara", { method: "POST", body: JSON.stringify({ tabla, columna, funcion: "" }) });
-        msg(`Ejecutado: ${r.ejecutado}`);
-        vistaAdmin();
-      } catch (ex) { msg(ex.message); }
+        anunciar(`Ejecutado en el motor: ${r.ejecutado}`);
+        await vistaAdmin();
+      } catch (ex) { anunciar(`El motor rechazó la orden: ${ex.message}`); await vistaAdmin(); }
     })
   );
 
@@ -376,9 +414,9 @@ async function vistaAdmin() {
           principal: $("#p-principal").value,
         }),
       });
-      msg(`Ejecutado: ${r.ejecutado}`);
-      vistaAdmin();
-    } catch (ex) { msg(ex.message); }
+      anunciar(`Ejecutado en el motor: ${r.ejecutado}`);
+      await vistaAdmin();
+    } catch (ex) { anunciar(`El motor rechazó la orden: ${ex.message}`); await vistaAdmin(); }
   });
 
   $("#vista").querySelectorAll("[data-toggle]").forEach((b) =>
@@ -388,8 +426,9 @@ async function vistaAdmin() {
           method: "POST",
           body: JSON.stringify({ usuario: b.dataset.toggle, activo: b.dataset.activo !== "1" }),
         });
-        vistaAdmin();
-      } catch (ex) { msg(ex.message); }
+        anunciar(`Usuario ${b.dataset.toggle} ${b.dataset.activo === "1" ? "desactivado" : "activado"}.`);
+        await vistaAdmin();
+      } catch (ex) { anunciar(`El motor rechazó la orden: ${ex.message}`); await vistaAdmin(); }
     })
   );
 }
@@ -406,20 +445,21 @@ async function vistaFirma() {
   }
 
   const filas = d.filas || [];
+  const monto = (v) => (v === null || v === undefined || v === "" ? "—" : Number(v).toFixed(2));
   const cuerpo = filas
     .map((f) => {
       const ok = Number(f.FirmaValida) === 1;
       const intacto = f.Integridad === "INTACTO";
       return `<tr>
-        <td>${esc(f.DocID)}</td>
-        <td class="mono">${esc(String(f.Referencia).slice(0, 8))}…</td>
-        <td>${esc(f.ClienteID)}</td>
-        <td>${esc(f.Monto)}</td>
-        <td>${esc(f.Tipo)}</td>
-        <td>${esc(f.fecha_firma)}</td>
-        <td><span class="badge ${ok ? "ok" : "no"}">${ok ? "válida" : "inválida"}</span></td>
-        <td><span class="badge ${intacto ? "ok" : "no"}">${esc(f.Integridad)}</span></td>
-        ${esDba ? `<td class="row">
+        <td data-col="Doc" class="num">${esc(f.DocID)}</td>
+        <td data-col="Referencia" class="mono">${esc(String(f.Referencia).slice(0, 8))}…</td>
+        <td data-col="Cliente" class="num">${esc(f.ClienteID)}</td>
+        <td data-col="Monto" class="num">${esc(monto(f.Monto))}</td>
+        <td data-col="Tipo">${esc(f.Tipo)}</td>
+        <td data-col="Fecha firma">${esc(f.fecha_firma)}</td>
+        <td data-col="Firma"><span class="badge ${ok ? "ok" : "no"}">${ok ? "válida" : "inválida"}</span></td>
+        <td data-col="Integridad"><span class="badge ${intacto ? "ok" : "no"}">${esc(f.Integridad)}</span></td>
+        ${esDba ? `<td class="acciones">
           <button class="ghost mini" data-alterar="${esc(f.DocID)}">Alterar</button>
           <button class="ghost mini" data-restaurar="${esc(f.DocID)}">Restaurar</button></td>` : ""}
       </tr>`;
@@ -430,18 +470,29 @@ async function vistaFirma() {
     <div class="card">
       <h3>Firma una transacción</h3>
       <p class="muted">La base arma el XML, calcula el SHA-256 y lo firma con la clave privada del certificado. Nada se firma en la aplicación.</p>
-      <div class="row" style="margin-top: 12px">
-        <select id="f-cliente">
-          <option value="1">Cliente 1</option><option value="2">Cliente 2</option>
-          <option value="3">Cliente 3</option><option value="4">Cliente 4</option>
-          <option value="5">Cliente 5</option>
-        </select>
-        <select id="f-tipo">
-          <option>Transferencia</option><option>Deposito</option>
-          <option>Retiro</option><option>Pago servicio</option>
-        </select>
-        <input id="f-monto" type="number" step="0.01" min="1" value="2500.00" style="max-width:150px" />
-        <button class="primary mini" id="f-firmar">Firmar y guardar</button>
+      <div class="fichas">
+        <div class="campo">
+          <label for="f-cliente">Cliente</label>
+          <select id="f-cliente">
+            <option value="1">Cliente 1</option><option value="2">Cliente 2</option>
+            <option value="3">Cliente 3</option><option value="4">Cliente 4</option>
+            <option value="5">Cliente 5</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="f-tipo">Tipo</label>
+          <select id="f-tipo">
+            <option>Transferencia</option><option>Deposito</option>
+            <option>Retiro</option><option>Pago servicio</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="f-monto">Monto</label>
+          <input id="f-monto" type="number" step="0.01" min="1" value="2500.00" />
+        </div>
+        <div class="campo">
+          <button class="primary mini" id="f-firmar">Firmar y guardar</button>
+        </div>
       </div>
       <p class="muted" id="f-msg" style="margin-top: 8px"></p>
     </div>
@@ -455,9 +506,9 @@ async function vistaFirma() {
         <span class="badge ok">${filas.length} documentos</span>
       </div>
       <div class="tabla-wrap" style="margin-top: 12px">
-        <table class="datos">
-          <thead><tr><th>Doc</th><th>Referencia</th><th>Cliente</th><th>Monto</th><th>Tipo</th><th>Fecha firma</th><th>Firma</th><th>Integridad</th>${esDba ? "<th>Demostración</th>" : ""}</tr></thead>
-          <tbody>${cuerpo || `<tr><td colspan="9" class="nulo">Todavía no hay documentos firmados.</td></tr>`}</tbody>
+        <table class="datos apilada">
+          <thead><tr><th>Doc</th><th>Referencia</th><th>Cliente</th><th>Monto</th><th>Tipo</th><th>Fecha firma</th><th>Firma</th><th>Integridad</th>${esDba ? `<th class="acciones">Demostración</th>` : ""}</tr></thead>
+          <tbody>${cuerpo || `<tr><td colspan="${esDba ? 9 : 8}" class="nulo">Todavía no hay documentos firmados.</td></tr>`}</tbody>
         </table>
       </div>
       ${esDba ? `<p class="muted" style="margin-top:10px">Con <b>Alterar</b> se cambia el monto dentro del XML: la firma sigue siendo criptográficamente válida (nadie tocó el hash firmado), pero la integridad pasa a ALTERADO. Por eso se verifican las dos cosas.</p>` : ""}
@@ -480,7 +531,7 @@ async function vistaFirma() {
     } catch (ex) { msg(ex.message); }
   });
 
-  document.querySelectorAll("[data-alterar]").forEach((b) =>
+  $("#vista").querySelectorAll("[data-alterar]").forEach((b) =>
     b.addEventListener("click", async () => {
       try {
         await api("/api/firma/alterar", { method: "POST", body: JSON.stringify({ docId: Number(b.dataset.alterar) }) });
@@ -489,7 +540,7 @@ async function vistaFirma() {
     })
   );
 
-  document.querySelectorAll("[data-restaurar]").forEach((b) =>
+  $("#vista").querySelectorAll("[data-restaurar]").forEach((b) =>
     b.addEventListener("click", async () => {
       try {
         await api("/api/firma/restaurar", { method: "POST", body: JSON.stringify({ docId: Number(b.dataset.restaurar) }) });
@@ -549,7 +600,7 @@ async function vistaCifrado() {
       </div>
       <div class="card">
         <h3>Qué protege cada capa</h3>
-        <div class="kv">
+        <div class="kv prosa">
           <div><span>TDE</span><span>robo de disco o de backup</span></div>
           <div><span>DDM</span><span>que un usuario vea datos en pantalla</span></div>
           <div><span>Firma digital</span><span>alteración y repudio del documento</span></div>
@@ -585,13 +636,13 @@ async function vistaColumnas() {
   const cuerpo = filas
     .map(
       (f) => `<tr>
-        <td>${esc(f.TarjetaID)}</td>
-        <td>${esc(f.ClienteID)}</td>
-        <td class="mono">•••• ${esc(f.Ultimos4)}</td>
-        <td>${esc(f.bytes_numero)} bytes</td>
-        <td>${esc(f.bytes_cvv)} bytes</td>
-        <td>${esc(f.alta)}</td>
-        <td><button class="ghost mini" data-descifrar="${esc(f.TarjetaID)}">Descifrar</button></td>
+        <td data-col="ID" class="num">${esc(f.TarjetaID)}</td>
+        <td data-col="Cliente" class="num">${esc(f.ClienteID)}</td>
+        <td data-col="Tarjeta" class="mono">•••• ${esc(f.Ultimos4)}</td>
+        <td data-col="Número cifrado" class="num">${esc(f.bytes_numero)} bytes</td>
+        <td data-col="CVV cifrado" class="num">${esc(f.bytes_cvv)} bytes</td>
+        <td data-col="Alta">${esc(f.alta)}</td>
+        <td class="acciones"><button class="ghost mini" data-descifrar="${esc(f.TarjetaID)}">Descifrar</button></td>
       </tr>`
     )
     .join("");
@@ -600,15 +651,26 @@ async function vistaColumnas() {
     <div class="card">
       <h3>Tarjeta y CVV cifrados con clave simétrica</h3>
       <p class="muted">El valor se guarda cifrado con AES-256 (<span class="mono">EncryptByKey</span>). Tener SELECT sobre la tabla no alcanza: para leerlo hay que poder abrir la clave.</p>
-      <div class="row" style="margin-top: 12px">
-        <select id="k-cliente">
-          <option value="1">Cliente 1</option><option value="2">Cliente 2</option>
-          <option value="3">Cliente 3</option><option value="4">Cliente 4</option>
-          <option value="5">Cliente 5</option>
-        </select>
-        <input id="k-numero" placeholder="4532-1122-3344-5566" style="max-width: 220px" />
-        <input id="k-cvv" placeholder="123" style="max-width: 90px" />
-        <button class="primary mini" id="k-guardar">Guardar cifrada</button>
+      <div class="fichas">
+        <div class="campo">
+          <label for="k-cliente">Cliente</label>
+          <select id="k-cliente">
+            <option value="1">Cliente 1</option><option value="2">Cliente 2</option>
+            <option value="3">Cliente 3</option><option value="4">Cliente 4</option>
+            <option value="5">Cliente 5</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label for="k-numero">Número de tarjeta</label>
+          <input id="k-numero" placeholder="4532-1122-3344-5566" />
+        </div>
+        <div class="campo">
+          <label for="k-cvv">CVV</label>
+          <input id="k-cvv" placeholder="123" />
+        </div>
+        <div class="campo">
+          <button class="primary mini" id="k-guardar">Guardar cifrada</button>
+        </div>
       </div>
       <p class="muted" id="k-msg" style="margin-top: 8px"></p>
     </div>
@@ -622,8 +684,8 @@ async function vistaColumnas() {
         <span class="badge ok">${filas.length} registros</span>
       </div>
       <div class="tabla-wrap" style="margin-top: 12px">
-        <table class="datos">
-          <thead><tr><th>ID</th><th>Cliente</th><th>Tarjeta</th><th>Número cifrado</th><th>CVV cifrado</th><th>Alta</th><th>Prueba</th></tr></thead>
+        <table class="datos apilada">
+          <thead><tr><th>ID</th><th>Cliente</th><th>Tarjeta</th><th>Número cifrado</th><th>CVV cifrado</th><th>Alta</th><th class="acciones">Prueba</th></tr></thead>
           <tbody>${cuerpo || `<tr><td colspan="7" class="nulo">Sin registros.</td></tr>`}</tbody>
         </table>
       </div>
@@ -648,7 +710,7 @@ async function vistaColumnas() {
     } catch (ex) { msg(ex.message); }
   });
 
-  document.querySelectorAll("[data-descifrar]").forEach((b) =>
+  $("#vista").querySelectorAll("[data-descifrar]").forEach((b) =>
     b.addEventListener("click", async () => {
       const id = Number(b.dataset.descifrar);
       const caja = $("#k-resultado");
