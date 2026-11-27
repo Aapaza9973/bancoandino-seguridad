@@ -1,0 +1,17 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+.vs/
+publish/
+
+# Logs de ejecución
+*.log
+
+# Temporal de Office
+~$*
+
+# Secretos (la cadena de conexión vive en user-secrets, no en el repo)
+*.env
+appsettings.*.local.json
