@@ -1,0 +1,80 @@
+# Peticiones de prueba - BancoAndino
+# Extensión REST Client de VS Code: abre este archivo y pulsa "Send Request"
+# sobre cada bloque. El token del login queda guardado en {{login.response.body.$.token}}.
+
+@host = http://127.0.0.1:5080
+
+### Salud del servicio
+GET {{host}}/api/salud
+
+### Login como cajero (sin permisos sobre la clave de cifrado)
+# @name login
+POST {{host}}/api/login
+Content-Type: application/json
+
+{
+  "usuario": "ana",
+  "password": "Cajero_Ana2026!"
+}
+
+### Login como riesgos (puede descifrar tarjetas)
+# @name loginRiesgos
+POST {{host}}/api/login
+Content-Type: application/json
+
+{
+  "usuario": "maria",
+  "password": "Riesgos_Maria2026!"
+}
+
+### Login como dba
+# @name loginDba
+POST {{host}}/api/login
+Content-Type: application/json
+
+{
+  "usuario": "admin",
+  "password": "Dba_Admin2026!"
+}
+
+### Sesión actual: usuario, rol, permisos y UNMASK
+GET {{host}}/api/sesion
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Documentos firmados: firma válida e integridad del contenido
+GET {{host}}/api/firma
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Tarjetas cifradas por columna (solo binario y últimos 4)
+GET {{host}}/api/columnas
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Intentar descifrar como cajero -> 403, el motor niega abrir la clave
+POST {{host}}/api/columnas/descifrar
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+{
+  "tarjetaId": 1
+}
+
+### Descifrar como riesgos -> número y CVV reales
+POST {{host}}/api/columnas/descifrar
+Content-Type: application/json
+Authorization: Bearer {{loginRiesgos.response.body.$.token}}
+
+{
+  "tarjetaId": 1
+}
+
+### Estado de TDE y cifrado en reposo
+GET {{host}}/api/cifrado
+Authorization: Bearer {{loginDba.response.body.$.token}}
+
+### Registro de auditoría
+GET {{host}}/api/auditoria
+Authorization: Bearer {{loginDba.response.body.$.token}}
+
+### Panel de administración (permisos y máscaras)
+GET {{host}}/api/admin/estado
+Authorization: Bearer {{loginDba.response.body.$.token}}
