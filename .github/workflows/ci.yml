@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pruebas:
+    name: Compilar y probar contra SQL Server
+    runs-on: ubuntu-latest
+
+    env:
+      SA_PASSWORD: 'BancoAndino_Ci2026!'
+      SQLCMD: '/opt/mssql-tools18/bin/sqlcmd'
+      ConnectionStrings__BancoAndino: 'Server=127.0.0.1,1433;Database=BancoAndino;User Id=sa;Password=BancoAndino_Ci2026!;TrustServerCertificate=True;Encrypt=False;Application Name=BancoAndinoCi'
+
+    steps:
+      - name: Descargar el repositorio
+        uses: actions/checkout@v4
+
+      - name: Instalar .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Levantar SQL Server 2022 en un contenedor
+        run: |
+          docker run -d --name sql \
+            -e ACCEPT_EULA=Y \
+            -e MSSQL_SA_PASSWORD="$SA_PASSWORD" \
+            -e MSSQL_PID=Developer \
+            -p 1433:1433 \
+            mcr.microsoft.com/mssql/server:2022-latest
+
+      - name: Esperar a que el motor responda
+        run: |
+          for i in $(seq 1 60); do
+            if docker exec sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" > /dev/null 2>&1; then
+              echo "SQL Server listo"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "SQL Server no respondió a tiempo"
+          docker logs sql | tail -40
+          exit 1
+
+      - name: Crear la base con el modelo de seguridad
+        run: |
+          for archivo in 01_esquema.sql 03_usuarios_app.sql 05_firma_transacciones.sql 06_cifrado_columnas.sql; do
+            echo "== $archivo"
+            docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < "app/sql/$archivo"
+          done
+
+      - name: Activar TDE y sembrar un documento firmado
+        run: |
+          docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/ci/40_tde_ci.sql
+          docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/ci/50_seed_ci.sql
+
+      - name: Compilar y ejecutar las pruebas
+        run: dotnet test tests/BancoAndino.Tests/BancoAndino.Tests.csproj --nologo --verbosity normal
+
+      - name: Diagnóstico si algo falla
+        if: failure()
+        run: docker logs sql | tail -60
