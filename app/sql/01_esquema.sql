@@ -92,11 +92,11 @@ IF SUSER_ID('auditor_sofia')   IS NOT NULL DROP LOGIN auditor_sofia;
 IF SUSER_ID('dba_admin')       IS NOT NULL DROP LOGIN dba_admin;
 GO
 
-CREATE LOGIN cajero_ana      WITH PASSWORD = 'Cajero_Ana2026!',      CHECK_POLICY = OFF;
-CREATE LOGIN supervisor_luis WITH PASSWORD = 'Super_Luis2026!',     CHECK_POLICY = OFF;
-CREATE LOGIN riesgos_maria   WITH PASSWORD = 'Riesgos_Maria2026!',  CHECK_POLICY = OFF;
-CREATE LOGIN auditor_sofia   WITH PASSWORD = 'Audit_Sofia2026!',    CHECK_POLICY = OFF;
-CREATE LOGIN dba_admin       WITH PASSWORD = 'Dba_Admin2026!',      CHECK_POLICY = OFF;
+CREATE LOGIN cajero_ana      WITH PASSWORD = 'Cajero_Ana_2027#',      CHECK_POLICY = OFF;
+CREATE LOGIN supervisor_luis WITH PASSWORD = 'Super_Luis_2027#',     CHECK_POLICY = OFF;
+CREATE LOGIN riesgos_maria   WITH PASSWORD = 'Riesgos_Maria_2027#',  CHECK_POLICY = OFF;
+CREATE LOGIN auditor_sofia   WITH PASSWORD = 'Auditoria_Sofia_2027#',    CHECK_POLICY = OFF;
+CREATE LOGIN dba_admin       WITH PASSWORD = 'Dba_Admin_2027#',      CHECK_POLICY = OFF;
 GO
 
 CREATE USER cajero_ana      FOR LOGIN cajero_ana;

@@ -14,7 +14,7 @@ Content-Type: application/json
 
 {
   "usuario": "ana",
-  "password": "Cajero_Ana2026!"
+  "password": "Cajero_Ana_2027#"
 }
 
 ### Login como riesgos (puede descifrar tarjetas)
@@ -24,7 +24,7 @@ Content-Type: application/json
 
 {
   "usuario": "maria",
-  "password": "Riesgos_Maria2026!"
+  "password": "Riesgos_Maria_2027#"
 }
 
 ### Login como dba
@@ -34,7 +34,7 @@ Content-Type: application/json
 
 {
   "usuario": "admin",
-  "password": "Dba_Admin2026!"
+  "password": "Dba_Admin_2027#"
 }
 
 ### Sesión actual: usuario, rol, permisos y UNMASK

@@ -56,7 +56,7 @@ public class ApiTests : IClassFixture<Fabrica>
     [Fact]
     public async Task Cajero_ve_los_datos_pero_no_puede_descifrar_la_tarjeta()
     {
-        var c = await ClienteConAsync(_fabrica, "ana", "Cajero_Ana2026!");
+        var c = await ClienteConAsync(_fabrica, "ana", "Cajero_Ana_2027#");
 
         // La tabla se puede leer (los últimos 4 son de referencia)...
         var lista = await c.GetAsync("/api/columnas");
@@ -74,7 +74,7 @@ public class ApiTests : IClassFixture<Fabrica>
     [Fact]
     public async Task Riesgos_puede_descifrar_la_tarjeta()
     {
-        var c = await ClienteConAsync(_fabrica, "maria", "Riesgos_Maria2026!");
+        var c = await ClienteConAsync(_fabrica, "maria", "Riesgos_Maria_2027#");
         var r = await c.PostAsJsonAsync("/api/columnas/descifrar", new { tarjetaId = 1 });
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
@@ -88,7 +88,7 @@ public class ApiTests : IClassFixture<Fabrica>
     [Fact]
     public async Task La_base_esta_cifrada_con_TDE()
     {
-        var c = await ClienteConAsync(_fabrica, "admin", "Dba_Admin2026!");
+        var c = await ClienteConAsync(_fabrica, "admin", "Dba_Admin_2027#");
         var r = await c.GetAsync("/api/cifrado");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);
@@ -101,7 +101,7 @@ public class ApiTests : IClassFixture<Fabrica>
     [Fact]
     public async Task Las_transacciones_firmadas_informan_firma_e_integridad()
     {
-        var c = await ClienteConAsync(_fabrica, "admin", "Dba_Admin2026!");
+        var c = await ClienteConAsync(_fabrica, "admin", "Dba_Admin_2027#");
         var r = await c.GetAsync("/api/firma");
 
         Assert.Equal(HttpStatusCode.OK, r.StatusCode);

@@ -22,11 +22,11 @@ CREATE TABLE dbo.UsuariosApp (
 GO
 
 INSERT INTO dbo.UsuariosApp (Usuario, NombreCompleto, PrincipalBD, Rol, Sal, Hash) VALUES
- ('ana',     'Ana Quispe',      'cajero_ana',      'cajero',     'sal-ana-2026-0001',      HASHBYTES('SHA2_256', N'sal-ana-2026-0001' + N'Cajero_Ana2026!')),
- ('luis',    'Luis Mamani',     'supervisor_luis', 'supervisor', 'sal-luis-2026-002',      HASHBYTES('SHA2_256', N'sal-luis-2026-002' + N'Super_Luis2026!')),
- ('maria',   'Maria Condori',   'riesgos_maria',   'riesgos',    'sal-maria-2026-003',     HASHBYTES('SHA2_256', N'sal-maria-2026-003' + N'Riesgos_Maria2026!')),
- ('sofia',   'Sofia Vargas',    'auditor_sofia',   'auditor',    'sal-sofia-2026-004',     HASHBYTES('SHA2_256', N'sal-sofia-2026-004' + N'Audit_Sofia2026!')),
- ('admin',   'Administrador TI','dba_admin',       'dba',        'sal-admin-2026-005',     HASHBYTES('SHA2_256', N'sal-admin-2026-005' + N'Dba_Admin2026!'));
+ ('ana',     'Ana Quispe',      'cajero_ana',      'cajero',     'sal-ana-2026-0001',      HASHBYTES('SHA2_256', N'sal-ana-2026-0001' + N'Cajero_Ana_2027#')),
+ ('luis',    'Luis Mamani',     'supervisor_luis', 'supervisor', 'sal-luis-2026-002',      HASHBYTES('SHA2_256', N'sal-luis-2026-002' + N'Super_Luis_2027#')),
+ ('maria',   'Maria Condori',   'riesgos_maria',   'riesgos',    'sal-maria-2026-003',     HASHBYTES('SHA2_256', N'sal-maria-2026-003' + N'Riesgos_Maria_2027#')),
+ ('sofia',   'Sofia Vargas',    'auditor_sofia',   'auditor',    'sal-sofia-2026-004',     HASHBYTES('SHA2_256', N'sal-sofia-2026-004' + N'Auditoria_Sofia_2027#')),
+ ('admin',   'Administrador TI','dba_admin',       'dba',        'sal-admin-2026-005',     HASHBYTES('SHA2_256', N'sal-admin-2026-005' + N'Dba_Admin_2027#'));
 GO
 
 SELECT Usuario, NombreCompleto, PrincipalBD, Rol, Activo, DATALENGTH(Hash) AS bytes_hash
