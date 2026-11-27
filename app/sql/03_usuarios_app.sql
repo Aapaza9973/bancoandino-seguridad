@@ -17,7 +17,11 @@ CREATE TABLE dbo.UsuariosApp (
     Rol             VARCHAR(20)  NOT NULL,   -- cajero | supervisor | riesgos | auditor | dba
     Sal                 VARCHAR(24)  NOT NULL,
     Hash            VARBINARY(32) NOT NULL,
-    Activo          BIT NOT NULL DEFAULT 1
+    Activo          BIT NOT NULL DEFAULT 1,
+    -- Control de fuerza bruta: la aplicacion bloquea la cuenta tras N fallos.
+    IntentosFallidos INT NOT NULL DEFAULT 0,
+    BloqueadoHasta   DATETIME2(0) NULL,
+    UltimoIntento    DATETIME2(0) NULL
 );
 GO
 

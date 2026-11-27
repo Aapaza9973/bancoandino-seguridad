@@ -15,6 +15,12 @@ Bd.ConnectionString = builder.Configuration.GetConnectionString("BancoAndino")
 
 var sesiones = new ConcurrentDictionary<string, Sesion>();
 
+// Política de autenticación: 5 fallos bloquean la cuenta 5 minutos y la sesión
+// caduca a los 30 minutos sin uso (caducidad deslizante).
+const int MaxIntentosFallidos = 5;
+var minutosBloqueo = 5;
+var vidaSesion = TimeSpan.FromMinutes(30);
+
 var tablas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
 {
     ["clientes"] = "dbo.Clientes",
@@ -109,7 +115,16 @@ static string? Token(HttpContext ctx)
 Sesion? SesionDe(HttpContext ctx)
 {
     var t = Token(ctx);
-    return t is not null && sesiones.TryGetValue(t, out var s) ? s : null;
+    if (t is null || !sesiones.TryGetValue(t, out var s)) return null;
+
+    if (DateTime.UtcNow - s.UltimoUso > vidaSesion)
+    {
+        sesiones.TryRemove(t, out _);
+        return null;
+    }
+
+    s.UltimoUso = DateTime.UtcNow;
+    return s;
 }
 
 // ---------- autenticación ----------
@@ -118,24 +133,81 @@ app.MapPost("/api/login", async (LoginDto dto) =>
     if (string.IsNullOrWhiteSpace(dto.Usuario) || string.IsNullOrEmpty(dto.Password))
         return Results.BadRequest(new { error = "Usuario y contraseña son obligatorios." });
 
+    var usuario = dto.Usuario.Trim();
+
+    // 1) ¿La cuenta está bloqueada por intentos fallidos previos?
+    var estado = await ConsultaAsync(
+        @"SELECT Activo,
+                 ISNULL(DATEDIFF(SECOND, SYSUTCDATETIME(), BloqueadoHasta), 0) AS segundos_bloqueo
+          FROM dbo.UsuariosApp WHERE Usuario = @u",
+        ("@u", usuario));
+
+    if (estado.Count > 0 && Convert.ToInt32(estado[0]["segundos_bloqueo"]) > 0)
+    {
+        var minutos = (Convert.ToInt32(estado[0]["segundos_bloqueo"]) + 59) / 60;
+        return Results.Json(new
+        {
+            error = $"Cuenta bloqueada por intentos fallidos. Reintenta en {minutos} minuto(s).",
+            bloqueado = true
+        }, statusCode: 423);
+    }
+
+    // 2) Comparación del hash: la clave nunca se guarda ni se consulta en claro.
     var filas = await ConsultaAsync(
         @"SELECT Usuario, NombreCompleto, PrincipalBD, Rol
           FROM dbo.UsuariosApp
           WHERE Usuario = @u AND Activo = 1
             AND Hash = HASHBYTES('SHA2_256', Sal + @p)",
-        ("@u", dto.Usuario.Trim()), ("@p", dto.Password));
+        ("@u", usuario), ("@p", dto.Password));
 
     if (filas.Count == 0)
-        return Results.Json(new { error = "Credenciales incorrectas o usuario inactivo." }, statusCode: 401);
+    {
+        // Solo se cuentan los fallos de cuentas existentes: no se revela si el usuario existe.
+        var fallos = await ConsultaAsync(
+            @"UPDATE dbo.UsuariosApp
+                 SET IntentosFallidos = IntentosFallidos + 1,
+                     UltimoIntento    = SYSUTCDATETIME(),
+                     BloqueadoHasta   = CASE WHEN IntentosFallidos + 1 >= @max
+                                             THEN DATEADD(MINUTE, @min, SYSUTCDATETIME()) END
+                 OUTPUT INSERTED.IntentosFallidos AS intentos,
+                        ISNULL(DATEDIFF(SECOND, SYSUTCDATETIME(), INSERTED.BloqueadoHasta), 0) AS segundos_bloqueo
+               WHERE Usuario = @u AND Activo = 1;",
+            ("@max", MaxIntentosFallidos), ("@min", minutosBloqueo), ("@u", usuario));
+
+        if (fallos.Count > 0 && Convert.ToInt32(fallos[0]["segundos_bloqueo"]) > 0)
+            return Results.Json(new
+            {
+                error = $"Demasiados intentos fallidos: la cuenta queda bloqueada {minutosBloqueo} minutos.",
+                bloqueado = true
+            }, statusCode: 423);
+
+        return Results.Json(new
+        {
+            error = "Credenciales incorrectas o usuario inactivo.",
+            intentos_restantes = fallos.Count > 0
+                ? Math.Max(0, MaxIntentosFallidos - Convert.ToInt32(fallos[0]["intentos"]))
+                : (int?)null
+        }, statusCode: 401);
+    }
 
     var f = filas[0];
     var sesion = new Sesion(
         (string)f["Usuario"]!, (string)f["NombreCompleto"]!,
         (string)f["Rol"]!, (string)f["PrincipalBD"]!);
+    // Login correcto: se limpia el contador de fallos y se abre la sesión.
+    await EjecutarAsync(
+        "UPDATE dbo.UsuariosApp SET IntentosFallidos = 0, BloqueadoHasta = NULL WHERE Usuario = @u;",
+        ("@u", sesion.Usuario));
+
     var token = Guid.NewGuid().ToString("N");
     sesiones[token] = sesion;
 
-    return Results.Ok(new { token, usuario = sesion.Usuario, nombre = sesion.Nombre, rol = sesion.Rol, principal = sesion.Principal });
+    return Results.Ok(new
+    {
+        token, usuario = sesion.Usuario, nombre = sesion.Nombre,
+        rol = sesion.Rol, principal = sesion.Principal,
+        expira_minutos = (int)vidaSesion.TotalMinutes
+    });
 });
 
 app.MapPost("/api/logout", (HttpContext ctx) =>
@@ -538,7 +610,11 @@ record DocDto(int DocId);
 record TarjetaDto(int ClienteId, string? Numero, string? Cvv);
 record TarjetaIdDto(int TarjetaId);
 
-record Sesion(string Usuario, string Nombre, string Rol, string Principal);
+record Sesion(string Usuario, string Nombre, string Rol, string Principal)
+{
+    // Último uso de la sesión: base de la caducidad deslizante.
+    public DateTime UltimoUso { get; set; } = DateTime.UtcNow;
+}
 
 // Necesario para que las pruebas puedan arrancar la aplicación en memoria.
 public partial class Program { }
