@@ -405,6 +405,7 @@ button.mini { padding: 6px 10px; font-size: 0.62rem; }
   display: grid;
   gap: 18px;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: start;
 }
 
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
@@ -540,6 +541,8 @@ pre {
   margin: 0;
   padding: 12px 14px;
   overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-family: var(--datos);
   font-size: 0.72rem;
   line-height: 1.5;
@@ -653,6 +656,20 @@ table.datos tbody tr:hover td.acciones { background: var(--hoja-2); }
   font-size: 0.8rem;
   text-align: left;
   color: var(--tinta-2);
+}
+
+/* recuadro de una acción que este rol no ejecuta: se reserva, no se disimula */
+.limite {
+  margin-top: 14px;
+  padding: 10px 12px;
+  font-family: var(--display);
+  font-size: 0.62rem;
+  line-height: 1.6;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--tinta-2);
+  border: 1px dashed var(--regla-fuerte);
+  background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(22, 33, 28, 0.028) 6px 12px);
 }
 
 /* aviso de una orden ejecutada por el motor */

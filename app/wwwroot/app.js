@@ -2,6 +2,7 @@ const state = { token: sessionStorage.getItem("token"), sesion: null };
 let avisoAdmin = "";
 
 const $ = (sel) => document.querySelector(sel);
+const movimientoReducido = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const esc = (v) =>
   String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -582,10 +583,12 @@ async function vistaCifrado() {
         <div><span>Clave privada</span><span>${esc(cert.clave_privada || "—")}</span></div>
         <div><span>Vence</span><span>${esc(cert.vence || "—")}</span></div>
       </div>
-      <div class="row" style="margin-top: 14px">
-        ${esDba ? `<button class="primary mini" id="c-backup">Respaldar certificado (.cer + .pvk)</button>` : `<span class="muted">Solo administración puede respaldar el certificado.</span>`}
-      </div>
-      <p class="muted" id="c-msg" style="margin-top: 8px"></p>
+      ${esDba
+        ? `<div class="row" style="margin-top: 14px">
+             <button class="primary mini" id="c-backup">Respaldar certificado (.cer + .pvk)</button>
+           </div>
+           <p class="muted" id="c-msg" style="margin-top: 8px"></p>`
+        : `<p class="limite">Respaldo del certificado: solo la cuenta de administración.</p>`}
     </div>
 
     <div class="grid-2">
@@ -728,11 +731,13 @@ async function vistaColumnas() {
       } catch (ex) {
         const e = ex.data || {};
         caja.innerHTML = `<div class="denegado">
-          <h3>No puede descifrar</h3>
+          <h3>No puede descifrar la tarjeta ${id}</h3>
           <p class="muted">El motor rechazó abrir la clave para <span class="mono">${esc(e.principal || state.sesion.principal)}</span>. El registro sigue visible, pero el dato no.</p>
           <pre style="margin-top:10px">${esc(e.error || ex.message)}</pre>
         </div>`;
       }
+      // El veredicto se estampa debajo de la tabla: hay que llevarlo a la vista.
+      caja.scrollIntoView({ block: "nearest", behavior: movimientoReducido() ? "auto" : "smooth" });
     })
   );
 }
