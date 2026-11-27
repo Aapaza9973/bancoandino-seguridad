@@ -4,69 +4,88 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Banco Andino · Consola de seguridad</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
-  <!-- Pantalla de acceso -->
+  <!-- Acceso: formulario y nómina de prueba sobre una misma hoja -->
   <section id="login" class="login">
-    <div class="login-card">
-      <div class="brand">
-        <div class="logo">BA</div>
-        <div>
-          <h1>Banco Andino</h1>
-          <p class="muted">Consola de seguridad · SQL Server</p>
+    <div class="hoja-acceso">
+      <div class="acceso">
+        <p class="folio">Formulario 01 · Control de acceso</p>
+
+        <div class="membrete">
+          <span class="sigla" aria-hidden="true">BA</span>
+          <div>
+            <h1>Banco Andino</h1>
+            <p class="sub">Consola de seguridad · SQL Server 2022</p>
+          </div>
         </div>
+
+        <p class="proposito">
+          Cada consulta de esta consola viaja como un usuario de la base de datos.
+          Lo que el motor permite se muestra; lo que niega, se sella.
+        </p>
+
+        <form id="form-login" autocomplete="off">
+          <label for="usuario">Usuario</label>
+          <input id="usuario" name="usuario" placeholder="ana" required />
+
+          <label for="password">Contraseña</label>
+          <input id="password" name="password" type="password" placeholder="••••••••" required />
+
+          <button class="primary" type="submit">Abrir expediente</button>
+          <p id="login-error" class="error" hidden></p>
+        </form>
+
+        <p class="nota">Cinco intentos fallidos bloquean la cuenta cinco minutos.</p>
       </div>
 
-      <form id="form-login" autocomplete="off">
-        <label>Usuario
-          <input id="usuario" name="usuario" placeholder="ana" required />
-        </label>
-        <label>Contraseña
-          <input id="password" name="password" type="password" placeholder="••••••••" required />
-        </label>
-        <button class="primary" type="submit">Ingresar</button>
-        <p id="login-error" class="error" hidden></p>
-      </form>
+      <aside class="nomina">
+        <h2>Usuarios de prueba</h2>
+        <p class="nota">Cada uno entra con un principal de base distinto. Claves rotadas.</p>
 
-      <details class="demo">
-        <summary>Usuarios de prueba (claves rotadas)</summary>
         <table>
-          <thead><tr><th>Usuario</th><th>Clave</th><th>Rol</th></tr></thead>
+          <thead>
+            <tr><th>Usuario</th><th>Clave</th><th>Rol</th></tr>
+          </thead>
           <tbody>
-            <tr><td>ana</td><td>Cajero_Ana_2027#</td><td>Cajero</td></tr>
-            <tr><td>luis</td><td>Super_Luis_2027#</td><td>Supervisor</td></tr>
-            <tr><td>maria</td><td>Riesgos_Maria_2027#</td><td>Riesgos</td></tr>
-            <tr><td>sofia</td><td>Auditoria_Sofia_2027#</td><td>Auditor</td></tr>
-            <tr><td>admin</td><td>Dba_Admin_2027#</td><td>DBA</td></tr>
+            <tr><td class="mono">ana</td><td class="mono">Cajero_Ana_2027#</td><td>Cajero</td></tr>
+            <tr><td class="mono">luis</td><td class="mono">Super_Luis_2027#</td><td>Supervisor</td></tr>
+            <tr><td class="mono">maria</td><td class="mono">Riesgos_Maria_2027#</td><td>Riesgos</td></tr>
+            <tr><td class="mono">sofia</td><td class="mono">Auditoria_Sofia_2027#</td><td>Auditor</td></tr>
+            <tr><td class="mono">admin</td><td class="mono">Dba_Admin_2027#</td><td>DBA</td></tr>
           </tbody>
         </table>
-      </details>
+
+        <p class="nota pie">
+          ana ve datos enmascarados · maria tiene UNMASK · sofia audita sin administrar
+        </p>
+      </aside>
     </div>
   </section>
 
   <!-- Panel -->
   <div id="app" hidden>
-    <header class="topbar">
-      <div class="brand small">
-        <div class="logo">BA</div>
+    <header class="barra">
+      <div class="marca">
+        <span class="sigla chica" aria-hidden="true">BA</span>
         <div>
           <strong>Banco Andino</strong>
-          <p class="muted" id="ctx-linea">—</p>
+          <p id="ctx-linea" class="contexto">—</p>
         </div>
       </div>
-      <div class="topbar-right">
+      <div class="sesion">
         <span id="chip-usuario" class="chip">—</span>
-        <button id="btn-salir" class="ghost">Salir</button>
+        <button id="btn-salir" class="ghost">Cerrar sesión</button>
       </div>
     </header>
 
     <div class="layout">
-      <nav id="nav" class="nav"></nav>
+      <nav id="nav" class="nav" aria-label="Secciones del expediente"></nav>
       <main id="vista" class="vista"></main>
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

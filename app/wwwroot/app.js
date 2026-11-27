@@ -109,7 +109,7 @@ async function vistaResumen() {
   const s = state.sesion;
   const roles = (s.roles || []).map((r) => r.rol).join(", ") || "—";
   const permisos = (s.permisos || [])
-    .map((p) => `<div><span>${esc(p.estado)} ${esc(p.permiso)} ${esc(p.objeto)}</span><span class="mono">${esc(p.objeto)}</span></div>`)
+    .map((p) => `<div><span>${esc(p.permiso)}</span><span class="mono">${esc(p.objeto)}</span></div>`)
     .join("");
 
   $("#vista").innerHTML = `
@@ -128,7 +128,10 @@ async function vistaResumen() {
     </div>
     <div class="card">
       <h3>Permisos efectivos</h3>
-      ${permisos ? `<div class="kv">${permisos}</div>` : `<p class="muted">Sin permisos explícitos; hereda los del rol.</p>`}
+      ${permisos
+        ? `<p class="muted">${s.permisos.length} concesiones reconocidas por el motor para <span class="mono">${esc(s.principal)}</span>.</p>
+           <details class="permisos"><summary>Ver el detalle</summary><div class="kv">${permisos}</div></details>`
+        : `<p class="muted">Sin permisos explícitos; hereda los del rol.</p>`}
     </div>
     <div class="card">
       <h3>Cómo probarlo</h3>
@@ -157,7 +160,7 @@ async function vistaTabla(tabla) {
             const enmascarado =
               /XXXX|xxx@|\*\*\*\*/.test(txt) ||
               ((c === "SaldoCuenta" || c === "Salario") && Number(v) === 0);
-            const clase = v === null ? "nulo" : enmascarado ? "mascara" : "";
+            const clase = v === null ? "nulo" : enmascarado ? "mascara" : typeof v === "number" ? "num" : "";
             return `<td class="${clase}">${esc(txt)}</td>`;
           })
           .join("");
