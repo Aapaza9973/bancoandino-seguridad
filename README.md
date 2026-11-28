@@ -145,6 +145,7 @@ Las pruebas comparten la base: su constructor limpia `IntentosFallidos`/`Bloquea
 ### Requisitos
 
 - `sqlcmd` en el `PATH` y conexión por autenticación de Windows a `localhost` (los scripts no llevan credenciales).
+- Un login con permisos de **`sysadmin` o `dbo`**: los scripts hacen `TRUNCATE TABLE`, `CREATE`/`DROP INDEX` y `UPDATE STATISTICS`. La cuenta de la aplicación (`app_bancoandino`) **no alcanza**: solo tiene `EXECUTE` sobre los `usp_Sesion*` y `SELECT`/`UPDATE` en `UsuariosApp`, sin DDL ni acceso directo a `SesionesApp`.
 - La base `BancoAndino` creada hasta `app/sql/17_sesiones.sql`, con los procedimientos `usp_Sesion*` y sus índices.
 - Bash (Git Bash en Windows): los `.sh` usan `MSYS2_ARG_CONV_EXCL='*'` para que `-S`, `-I` y `-W` no se conviertan en rutas.
 
