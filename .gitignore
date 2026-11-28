@@ -15,3 +15,13 @@ publish/
 # Secretos (la cadena de conexión vive en user-secrets, no en el repo)
 *.env
 appsettings.*.local.json
+
+# Claves de la PKI local y certificados de Always Encrypted: se generan
+# con pki/*.ps1 y nunca se versionan.
+pki/*.pfx
+pki/*.pvk
+pki/*.key
+pki/*.cer
+
+# Temporales de los scripts
+.tmp/

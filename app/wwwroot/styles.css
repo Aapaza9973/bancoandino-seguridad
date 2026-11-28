@@ -658,6 +658,16 @@ table.datos tbody tr:hover td.acciones { background: var(--hoja-2); }
   color: var(--tinta-2);
 }
 
+/* columnas que el motor niega a este rol: se nombran, no se ocultan */
+.columnas-ocultas {
+  margin-top: 10px;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  color: var(--tinta-2);
+  border-left: 3px solid var(--sello);
+  background: rgba(22, 33, 28, 0.03);
+}
+
 /* recuadro de una acción que este rol no ejecuta: se reserva, no se disimula */
 .limite {
   margin-top: 14px;

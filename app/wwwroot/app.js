@@ -1,4 +1,4 @@
-const state = { token: sessionStorage.getItem("token"), sesion: null };
+const state = { sesion: null };
 let avisoAdmin = "";
 
 const $ = (sel) => document.querySelector(sel);
@@ -9,9 +9,9 @@ const esc = (v) =>
 async function api(ruta, opciones = {}) {
   const res = await fetch(ruta, {
     ...opciones,
+    credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
       ...(opciones.headers || {}),
     },
   });
@@ -26,12 +26,10 @@ $("#form-login").addEventListener("submit", async (e) => {
   const err = $("#login-error");
   err.hidden = true;
   try {
-    const data = await api("/api/login", {
+    await api("/api/login", {
       method: "POST",
       body: JSON.stringify({ usuario: $("#usuario").value, password: $("#password").value }),
     });
-    state.token = data.token;
-    sessionStorage.setItem("token", data.token);
     await iniciar();
   } catch (ex) {
     err.textContent = ex.message;
@@ -41,8 +39,6 @@ $("#form-login").addEventListener("submit", async (e) => {
 
 $("#btn-salir").addEventListener("click", async () => {
   try { await api("/api/logout", { method: "POST" }); } catch {}
-  sessionStorage.removeItem("token");
-  state.token = null;
   state.sesion = null;
   avisoAdmin = "";
   $("#app").hidden = true;
@@ -55,8 +51,7 @@ async function iniciar() {
   try {
     state.sesion = await api("/api/sesion");
   } catch {
-    sessionStorage.removeItem("token");
-    state.token = null;
+    state.sesion = null;
     return;
   }
   const s = state.sesion;
@@ -80,8 +75,11 @@ function pintarNav() {
     ["cifrado", "Cifrado (TDE)"],
     ["columnas", "Cifrado columnas"],
   ];
+  if (s.rol !== "dba") items.push(["inferencia", "Inferencia DDM"]);
+  if (s.rol === "cajero" || s.rol === "riesgos" || s.rol === "dba") items.push(["ae", "Always Encrypted"]);
+  if (s.rol === "auditor" || s.rol === "dba") items.push(["metadatos", "Metadatos y ACL"]);
   if (s.rol === "auditor" || s.rol === "dba") items.push(["auditoria", "Auditoría"]);
-  if (s.rol === "dba") items.push(["administracion", "Administración"]);
+  if (s.rol === "dba") items.push(["sqli", "SQL injection"], ["administracion", "Administración"]);
 
   $("#nav").innerHTML = items
     .map(([id, label]) => `<button data-vista="${id}">${label}</button>`)
@@ -106,10 +104,14 @@ function ir(vista) {
   marcarNav(vista);
   if (vista === "resumen") return vistaResumen();
   if (vista === "auditoria") return vistaAuditoria();
+  if (vista === "metadatos") return vistaMetadatos();
   if (vista === "administracion") return vistaAdmin();
   if (vista === "firma") return vistaFirma();
   if (vista === "cifrado") return vistaCifrado();
   if (vista === "columnas") return vistaColumnas();
+  if (vista === "ae") return vistaAe();
+  if (vista === "inferencia") return vistaInferencia();
+  if (vista === "sqli") return vistaSqli();
   return vistaTabla(vista);
 }
 
@@ -158,6 +160,7 @@ async function vistaTabla(tabla) {
       return;
     }
     const cols = Object.keys(filas[0]);
+    const ocultas = data.columnas_ocultas || [];
     const sensibles = new Set(["NumeroTarjeta", "SaldoCuenta", "Salario", "Email", "EmailCorporativo", "CI", "Telefono"]);
 
     const cuerpo = filas
@@ -167,7 +170,7 @@ async function vistaTabla(tabla) {
             const v = f[c];
             const txt = v === null ? "NULL" : String(v);
             const enmascarado =
-              /XXXX|xxx@|\*\*\*\*/.test(txt) ||
+              /XXXX|xxx@|\*\*\*\*\*/.test(txt) ||
               ((c === "SaldoCuenta" || c === "Salario") && Number(v) === 0);
             const clase = v === null ? "nulo" : enmascarado ? "mascara" : typeof v === "number" ? "num" : "";
             return `<td class="${clase}">${esc(txt)}</td>`;
@@ -184,7 +187,7 @@ async function vistaTabla(tabla) {
             <h3>${esc(data.tabla)}</h3>
             <p class="muted">${filas.length} filas · consultado como <span class="mono">${esc(data.principal)}</span></p>
           </div>
-          <span class="badge ok">SELECT permitido</span>
+          <span class="badge ok">${ocultas.length ? "SELECT por columna" : "SELECT permitido"}</span>
         </div>
         <div class="tabla-wrap" style="margin-top: 14px">
           <table class="datos">
@@ -193,6 +196,9 @@ async function vistaTabla(tabla) {
           </table>
         </div>
         <p class="muted" style="margin-top: 10px">En ámbar, los valores que SQL Server entrega enmascarados a este usuario.</p>
+        ${ocultas.length
+          ? `<p class="columnas-ocultas">Columnas denegadas por el motor: <span class="mono">${ocultas.map(esc).join(", ")}</span>. Un <span class="mono">SELECT</span> que las incluya se rechaza con el error 230.</p>`
+          : ""}
       </div>`;
   } catch (ex) {
     const d = ex.data || {};
@@ -224,7 +230,9 @@ async function vistaAuditoria() {
           <table class="datos">
             <thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
             <tbody>${filas
-              .map((f) => `<tr>${cols.map((c) => `<td>${esc(f[c])}</td>`).join("")}</tr>`)
+              .map((f) => `<tr>${cols.map((c) => c === "succeeded"
+                ? `<td><span class="badge ${Number(f[c]) ? "ok" : "no"}">${Number(f[c]) ? "permitido" : "denegado"}</span></td>`
+                : `<td>${esc(f[c])}</td>`).join("")}</tr>`)
               .join("")}</tbody>
           </table>
         </div>
@@ -232,6 +240,255 @@ async function vistaAuditoria() {
   } catch (ex) {
     $("#vista").innerHTML = `<div class="denegado"><h3>No disponible</h3><pre>${esc(ex.message)}</pre></div>`;
   }
+}
+
+/* ---------------- metadatos y ACL (auditor) ---------------- */
+async function vistaMetadatos() {
+  $("#vista").innerHTML = `<div class="card"><p class="muted">Leyendo el catálogo en el contexto del auditor…</p></div>`;
+  let d;
+  try {
+    d = await api("/api/metadatos");
+  } catch (ex) {
+    $("#vista").innerHTML = `<div class="denegado"><h3>Sin acceso a metadatos</h3><pre>${esc(ex.message)}</pre></div>`;
+    return;
+  }
+
+  const mascaras = d.mascaras || [];
+  const permisos = d.permisos || [];
+  const columnas = d.columnas || [];
+  const roles = d.roles || [];
+
+  $("#vista").innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content: space-between">
+        <div>
+          <h3>Metadatos del modelo</h3>
+          <p class="muted">Leído del catálogo como <span class="mono">${esc(d.principal)}</span>. El auditor necesita ver la ACL para auditarla, no los datos.</p>
+        </div>
+        <span class="badge ${d.view_definition ? "ok" : "no"}">VIEW DEFINITION ${d.view_definition ? "sí" : "no"}</span>
+      </div>
+      <div class="kv" style="margin-top: 10px">
+        <div><span>VIEW DEFINITION</span><span>${d.view_definition ? "concedido por el motor" : "no concedido"}</span></div>
+        <div><span>CONTROL de la base</span><span>${d.control ? "sí" : "no"}</span></div>
+        <div><span>Máscaras visibles</span><span>${mascaras.length}</span></div>
+        <div><span>Permisos visibles</span><span>${permisos.length}</span></div>
+        <div><span>Columnas inventariadas</span><span>${columnas.length}</span></div>
+      </div>
+      <p class="muted" style="margin-top: 10px">Con VIEW DEFINITION el auditor lee la ACL completa; sin CONTROL no puede cambiarla, y sin UNMASK sigue viendo los datos enmascarados.</p>
+    </div>
+
+    <div class="card">
+      <h3>Máscaras dinámicas</h3>
+      <p class="muted">Salida de <span class="mono">sys.masked_columns</span> en el contexto del auditor.</p>
+      <div class="tabla-wrap" style="margin-top: 12px">
+        <table class="datos apilada">
+          <thead><tr><th>Tabla</th><th>Columna</th><th>Función</th></tr></thead>
+          <tbody>${mascaras.map((m) => `<tr>
+            <td data-col="Tabla">${esc(m.tabla)}</td>
+            <td data-col="Columna">${esc(m.columna)}</td>
+            <td data-col="Función" class="mono">${esc(m.funcion)}</td>
+          </tr>`).join("") || `<tr><td colspan="3" class="nulo">Sin máscaras.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>ACL por principal</h3>
+      <p class="muted">GRANT, DENY y REVOKE tal como los registra el motor, incluidas las columnas denegadas.</p>
+      <div class="tabla-wrap alta" style="margin-top: 12px">
+        <table class="datos apilada">
+          <thead><tr><th>Principal</th><th>Permiso</th><th>Estado</th><th>Ámbito</th><th>Objeto / columna</th></tr></thead>
+          <tbody>${permisos.map((p) => `<tr>
+            <td data-col="Principal">${esc(p.principal)}</td>
+            <td data-col="Permiso">${esc(p.permiso)}</td>
+            <td data-col="Estado"><span class="badge ${p.estado === "GRANT" ? "ok" : "no"}">${esc(p.estado)}</span></td>
+            <td data-col="Ámbito">${esc(p.ambito)}</td>
+            <td data-col="Objeto / columna" class="mono">${esc(p.objeto)}${p.columna ? "." + esc(p.columna) : ""}</td>
+          </tr>`).join("") || `<tr><td colspan="5" class="nulo">Sin permisos visibles.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Columnas y cifrado</h3>
+      <p class="muted">Inventario de las tablas del modelo, con el tipo de cifrado de Always Encrypted cuando corresponde.</p>
+      <div class="tabla-wrap alta" style="margin-top: 12px">
+        <table class="datos apilada">
+          <thead><tr><th>Tabla</th><th>Columna</th><th>Tipo</th><th>Bytes</th><th>Nulo</th><th>Cifrado</th></tr></thead>
+          <tbody>${columnas.map((c) => `<tr>
+            <td data-col="Tabla">${esc(c.tabla)}</td>
+            <td data-col="Columna" class="mono">${esc(c.columna)}</td>
+            <td data-col="Tipo">${esc(c.tipo)}</td>
+            <td data-col="Bytes" class="num">${esc(c.bytes)}</td>
+            <td data-col="Nulo">${c.nulo ? "sí" : "no"}</td>
+            <td data-col="Cifrado">${c.cifrado ? `<span class="badge ok">${esc(c.cifrado)}</span>` : "—"}</td>
+          </tr>`).join("") || `<tr><td colspan="6" class="nulo">Sin columnas visibles.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Roles y miembros</h3>
+      <div class="tabla-wrap">
+        <table class="datos apilada">
+          <thead><tr><th>Rol</th><th>Miembro</th></tr></thead>
+          <tbody>${roles.map((r) => `<tr><td data-col="Rol">${esc(r.rol)}</td><td data-col="Miembro" class="mono">${esc(r.miembro)}</td></tr>`).join("") || `<tr><td colspan="2" class="nulo">Sin roles.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+/* ---------------- Always Encrypted ---------------- */
+async function vistaAe() {
+  $("#vista").innerHTML = `<div class="card"><p class="muted">Consultando claves y datos cifrados…</p></div>`;
+
+  let d;
+  try {
+    d = await api("/api/ae/estado");
+  } catch (ex) {
+    d = { ...(ex.data || {}), denegado: true, error: ex.message };
+  }
+
+  const cmk = d.cmk || [];
+  const cek = d.cek || [];
+  const columnas = d.columnas || [];
+
+  const cabecera = `
+    <div class="card">
+      <div class="row" style="justify-content: space-between">
+        <div>
+          <h3>Always Encrypted</h3>
+          <p class="muted">El motor guarda el dato cifrado. La clave de cifrado de columna (CEK) se abre con la clave maestra (CMK), que vive en el almacén del cliente y nunca llega a SQL Server.</p>
+        </div>
+        <span class="badge ${d.disponible ? "ok" : "no"}">${d.disponible ? "configurado" : "sin configurar"}</span>
+      </div>
+      <div class="kv" style="margin-top: 10px">
+        ${cmk.map((k) => `<div><span>CMK</span><span class="mono">${esc(k.name)} · ${esc(k.proveedor)}</span></div>
+          <div><span>Ruta de la CMK</span><span class="mono">${esc(k.ruta)}</span></div>`).join("")}
+        ${cek.map((k) => `<div><span>CEK</span><span class="mono">${esc(k.nombre || k.name)} · ${esc(k.algoritmo)} · ${esc(k.bytes_cifrados)} bytes</span></div>`).join("")}
+      </div>
+      ${d.motivo ? `<p class="limite" style="margin-top:10px">${esc(d.motivo)}</p>` : ""}
+    </div>`;
+
+  const columnasHtml = columnas.length
+    ? `<div class="card">
+        <h3>Columnas cifradas</h3>
+        <div class="tabla-wrap" style="margin-top: 12px">
+          <table class="datos apilada">
+            <thead><tr><th>Columna</th><th>Tipo de cifrado</th><th>Algoritmo</th><th>Collation</th></tr></thead>
+            <tbody>${columnas.map((c) => `<tr>
+              <td data-col="Columna" class="mono">${esc(c.columna)}</td>
+              <td data-col="Tipo de cifrado"><span class="badge ok">${esc(c.tipo)}</span></td>
+              <td data-col="Algoritmo">${esc(c.algoritmo)}</td>
+              <td data-col="Collation" class="mono">${esc(c.collation)}</td>
+            </tr>`).join("")}</tbody>
+          </table>
+        </div>
+        <p class="muted" style="margin-top:10px"><span class="mono">CI</span> es determinista: permite igualdad exacta. Nombre, saldo y tarjeta son aleatorios: no se pueden filtrar, ordenar ni agrupar.</p>
+      </div>`
+    : "";
+
+  if (!d.disponible || d.denegado) {
+    $("#vista").innerHTML = `
+      ${cabecera}
+      ${columnasHtml}
+      <div class="denegado">
+        <h3>${d.denegado ? "El motor negó la lectura" : "Sin claves configuradas"}</h3>
+        <p class="muted">${esc(d.error || d.motivo || "")}</p>
+        <p class="muted" style="margin-top:10px">Una tabla con Always Encrypted sigue protegida aunque el rol pida la fila: sin la CMK no hay texto claro.</p>
+      </div>`;
+    return;
+  }
+
+  const recorta = (v) => {
+    if (v === null || v === undefined) return "NULL";
+    const s = String(v);
+    if (/^[A-Za-z0-9+/=]{40,}$/.test(s)) return `${s.slice(0, 44)}… (${s.length} car.)`;
+    return s;
+  };
+
+  const tablaFilas = (filas, titulo, nota) => {
+    if (!filas || !filas.length) return "";
+    const cols = Object.keys(filas[0]);
+    return `<div class="card">
+      <h3>${titulo}</h3>
+      <p class="muted">${nota}</p>
+      <div class="tabla-wrap" style="margin-top: 12px">
+        <table class="datos">
+          <thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+          <tbody>${filas.map((f) => `<tr>${cols.map((c) => {
+            const v = f[c];
+            const binario = typeof v === "string" && /^[A-Za-z0-9+/=]{40,}$/.test(v);
+            return `<td class="${binario ? "mascara mono" : typeof v === "number" ? "num" : ""}">${esc(recorta(v))}</td>`;
+          }).join("")}</tr>`).join("")}</tbody>
+        </table>
+      </div>
+    </div>`;
+  };
+
+  $("#vista").innerHTML = `
+    ${cabecera}
+    ${columnasHtml}
+    <div class="grid-2">
+      ${tablaFilas(d.cifrada, "Sin Always Encrypted en el cliente",
+        "Misma cuenta, mismo SELECT, con la conexión sin descifrado: el driver entrega el binario. Es lo que ve el motor, un backup o un DBA.")}
+      ${tablaFilas(d.descifrada, "Con Always Encrypted en el cliente",
+        "La conexión pide las claves y el driver descifra en memoria: el texto claro nunca estuvo en el servidor.")}
+    </div>
+
+    <div class="card">
+      <h3>Guardar un cliente cifrado</h3>
+      <p class="muted">El INSERT viaja con los parámetros ya cifrados por el driver.</p>
+      <div class="fichas">
+        <div class="campo"><label for="ae-ci">CI</label><input id="ae-ci" placeholder="1122334" maxlength="9" /></div>
+        <div class="campo"><label for="ae-nombre">Nombre</label><input id="ae-nombre" placeholder="Cliente Always Encrypted" /></div>
+        <div class="campo"><label for="ae-saldo">Saldo</label><input id="ae-saldo" type="number" step="0.01" min="0" value="1000" /></div>
+        <div class="campo"><label for="ae-tarjeta">Tarjeta</label><input id="ae-tarjeta" placeholder="4532-0000-0000-9999" /></div>
+        <div class="campo"><button class="primary mini" id="ae-guardar">Guardar cifrado</button></div>
+      </div>
+      <p class="muted" id="ae-msg" style="margin-top: 8px"></p>
+    </div>
+
+    <div class="card">
+      <h3>Buscar por CI</h3>
+      <p class="muted">Solo funciona con una columna determinista: el motor compara los binarios cifrados, sin descifrarlos.</p>
+      <div class="fichas">
+        <div class="campo"><label for="ae-buscar-ci">CI exacta</label><input id="ae-buscar-ci" placeholder="8765432" maxlength="9" /></div>
+        <div class="campo"><button class="ghost mini" id="ae-buscar">Buscar</button></div>
+      </div>
+      <div id="ae-resultado"></div>
+    </div>`;
+
+  $("#ae-guardar").addEventListener("click", async () => {
+    const msg = $("#ae-msg");
+    try {
+      const r = await api("/api/ae/guardar", {
+        method: "POST",
+        body: JSON.stringify({
+          ci: $("#ae-ci").value,
+          nombre: $("#ae-nombre").value,
+          saldo: Number($("#ae-saldo").value),
+          tarjeta: $("#ae-tarjeta").value,
+        }),
+      });
+      msg.textContent = `Cliente ${r.clienteId} guardado cifrado.`;
+      vistaAe();
+    } catch (ex) {
+      msg.textContent = ex.message;
+    }
+  });
+
+  $("#ae-buscar").addEventListener("click", async () => {
+    const caja = $("#ae-resultado");
+    try {
+      const r = await api(`/api/ae/buscar?ci=${encodeURIComponent($("#ae-buscar-ci").value)}`);
+      caja.innerHTML = r.filas.length
+        ? `<div class="aviso">${r.filas.length} coincidencia(s) para CI ${esc(r.ci)}: ${r.filas.map((f) => `${esc(f.Nombre)} (saldo ${esc(f.SaldoCuenta)})`).join(" · ")}</div>`
+        : `<div class="aviso">Sin coincidencias para CI ${esc(r.ci)}.</div>`;
+    } catch (ex) {
+      caja.innerHTML = `<div class="denegado"><pre>${esc(ex.message)}</pre></div>`;
+    }
+  });
 }
 
 async function vistaAdmin() {
@@ -325,14 +582,14 @@ async function vistaAdmin() {
       </div>
       <div class="tabla-wrap alta" style="margin-top: 14px">
         <table class="datos apilada">
-          <thead><tr><th>Principal</th><th>Permiso</th><th>Estado</th><th>Objeto</th></tr></thead>
+          <thead><tr><th>Principal</th><th>Permiso</th><th>Estado</th><th>Objeto / columna</th></tr></thead>
           <tbody>
             ${d.permisos
               .map(
                 (p) => `<tr><td data-col="Principal">${esc(p.principal)}</td>
                 <td data-col="Permiso">${esc(p.permiso)}</td>
                 <td data-col="Estado">${esc(p.estado)}</td>
-                <td data-col="Objeto" class="mono">${esc(p.objeto)}</td></tr>`
+                <td data-col="Objeto / columna" class="mono">${esc(p.objeto)}${p.columna ? `.${esc(p.columna)}` : ""}</td></tr>`
               )
               .join("")}
           </tbody>
@@ -378,6 +635,12 @@ async function vistaAdmin() {
           </tbody>
         </table>
       </div>
+    </div>
+
+    <div class="card">
+      <h3>Sesiones</h3>
+      <p class="muted">${esc(d.sesiones ?? 0)} sesiones vigentes en <span class="mono">dbo.SesionesApp</span>. Se guarda el SHA-256 del token, no el token. La revocación alcanza a cualquier proceso o nodo.</p>
+      <button class="ghost" id="btn-revocar">Revocar todas las sesiones</button>
     </div>`;
 
   const anunciar = (t) => { avisoAdmin = t; };
@@ -432,6 +695,113 @@ async function vistaAdmin() {
       } catch (ex) { anunciar(`El motor rechazó la orden: ${ex.message}`); await vistaAdmin(); }
     })
   );
+
+  $("#btn-revocar").addEventListener("click", async () => {
+    try {
+      const r = await api("/api/admin/revocar-sesiones", { method: "POST" });
+      state.sesion = null;
+      $("#app").hidden = true;
+      $("#login").hidden = false;
+      $("#login-error").hidden = false;
+      $("#login-error").textContent = `Se revocaron ${r.revocadas} sesiones. Vuelve a entrar.`;
+    } catch (ex) {
+      anunciar(`No se pudo revocar: ${ex.message}`);
+      await vistaAdmin();
+    }
+  });
+}
+
+/* ---------------- inferencia DDM ---------------- */
+async function vistaInferencia() {
+  let datos;
+  try {
+    datos = await api("/api/datos/clientes");
+  } catch (ex) {
+    $("#vista").innerHTML = `<div class="denegado"><h3>Sin acceso</h3><pre>${esc(ex.message)}</pre></div>`;
+    return;
+  }
+  const filas = datos.filas || [];
+  const opciones = filas
+    .map((f) => `<option value="${esc(f.ClienteID)}">Cliente ${esc(f.ClienteID)} · ${esc(f.Nombre)} — saldo visible ${esc(f.SaldoCuenta)}</option>`)
+    .join("");
+
+  $("#vista").innerHTML = `
+    <div class="card">
+      <h3>Inferencia por <span class="mono">WHERE</span></h3>
+      <p class="muted">El enmascaramiento protege lo que se muestra, no lo que se filtra. La consola puede preguntar si el saldo real supera un umbral y recuperar el valor exacto por búsqueda binaria.</p>
+      <div class="fichas">
+        <div class="campo"><label for="i-cliente">Cliente</label><select id="i-cliente">${opciones}</select></div>
+        <div class="campo"><label for="i-umbral">Umbral</label><input id="i-umbral" type="number" step="0.01" value="0" /></div>
+        <div class="campo"><button class="primary mini" id="i-probar">Probar umbral</button></div>
+        <div class="campo"><button class="ghost mini" id="i-recuperar">Recuperar saldo exacto</button></div>
+      </div>
+      <div id="i-resultado"></div>
+      <p class="muted" style="margin-top:10px">El motor evalúa <span class="mono">SaldoCuenta &gt;= @umbral</span> sobre el valor real; <span class="mono">default()</span> solo cambia la salida.</p>
+    </div>`;
+
+  const consultar = async (id, umbral) => {
+    const r = await api(`/api/demo/inferencia?clienteId=${id}&umbral=${encodeURIComponent(umbral)}`);
+    return Number(r.coincide) > 0;
+  };
+  const resultado = (html) => { $("#i-resultado").innerHTML = html; };
+
+  $("#i-probar").addEventListener("click", async () => {
+    const id = Number($("#i-cliente").value);
+    const u = $("#i-umbral").value;
+    try {
+      const r = await api(`/api/demo/inferencia?clienteId=${id}&umbral=${encodeURIComponent(u)}`);
+      resultado(`<div class="aviso">El cliente ${id} ${Number(r.coincide) ? "supera" : "no supera"} el umbral ${esc(r.umbral)}. La consola sigue mostrando el saldo enmascarado.</div>`);
+    } catch (ex) {
+      resultado(`<div class="denegado"><pre>${esc(ex.message)}</pre></div>`);
+    }
+  });
+
+  $("#i-recuperar").addEventListener("click", async () => {
+    const id = Number($("#i-cliente").value);
+    let lo = 0, hi = 1000000;
+    try {
+      for (let i = 0; i < 42; i++) {
+        const mid = (lo + hi) / 2;
+        if (await consultar(id, mid.toFixed(2))) lo = mid; else hi = mid;
+      }
+      resultado(`<div class="denegado"><h3>Saldo inferido</h3><p class="muted">Cliente ${id}: el motor confirma que el saldo real es <span class="mono">${lo.toFixed(2)}</span> aunque la tabla lo muestre enmascarado.</p></div>`);
+    } catch (ex) {
+      resultado(`<div class="denegado"><pre>${esc(ex.message)}</pre></div>`);
+    }
+  });
+}
+
+/* ---------------- SQL injection ---------------- */
+function vistaSqli() {
+  $("#vista").innerHTML = `
+    <div class="card">
+      <h3>SQL injection: concatenación vs. parámetro</h3>
+      <p class="muted">Mismo filtro, dos procedimientos. El primero pega el valor en el texto de la consulta; el segundo lo pasa como parámetro.</p>
+      <div class="fichas">
+        <div class="campo"><label for="s-filtro">Filtro</label><input id="s-filtro" value="' OR 1=1--" /></div>
+        <div class="campo"><button class="primary mini" id="s-probar">Ejecutar</button></div>
+      </div>
+      <div id="s-resultado"></div>
+      <p class="muted" style="margin-top:10px">Prueba con <span class="mono">' OR 1=1--</span>: la versión vulnerable devuelve todos los clientes; la parametrizada, ninguno.</p>
+    </div>`;
+
+  const tabla = (filas) => `<table class="datos">
+      <thead><tr><th>ClienteID</th><th>Nombre</th></tr></thead>
+      <tbody>${filas.map((x) => `<tr><td>${esc(x.ClienteID)}</td><td>${esc(x.Nombre)}</td></tr>`).join("")}</tbody>
+    </table>`;
+
+  $("#s-probar").addEventListener("click", async () => {
+    try {
+      const r = await api(`/api/demo/sqli?filtro=${encodeURIComponent($("#s-filtro").value)}`);
+      $("#s-resultado").innerHTML = `
+        <div class="grid-2" style="margin-top:14px">
+          <div class="card"><h3>Vulnerable (concatenación)</h3><p class="muted">${r.vulnerable.length} fila(s)</p><div class="tabla-wrap">${tabla(r.vulnerable)}</div></div>
+          <div class="card"><h3>Seguro (parámetro)</h3><p class="muted">${r.seguro.length} fila(s)</p><div class="tabla-wrap">${tabla(r.seguro)}</div></div>
+        </div>`;
+    } catch (ex) {
+      $("#s-resultado").innerHTML = `<div class="denegado"><pre>${esc(ex.message)}</pre></div>`;
+    }
+  });
 }
 
 /* ---------------- firma digital ---------------- */
@@ -513,6 +883,13 @@ async function vistaFirma() {
         </table>
       </div>
       ${esDba ? `<p class="muted" style="margin-top:10px">Con <b>Alterar</b> se cambia el monto dentro del XML: la firma sigue siendo criptográficamente válida (nadie tocó el hash firmado), pero la integridad pasa a ALTERADO. Por eso se verifican las dos cosas.</p>` : ""}
+    </div>
+
+    <div class="card">
+      <h3>Firma XMLDSig (W3C)</h3>
+      <p class="muted">Firma embebida <span class="mono">&lt;Signature&gt;</span> con RSA-SHA256 y canonicalización Exclusive C14N. El certificado lo emite la CA de <span class="mono">pki/</span> y la cadena se valida contra su raíz.</p>
+      <button class="ghost" id="f-xmldsig">Firmar y verificar XML</button>
+      <div id="f-xmldsig-out"></div>
     </div>`;
 
   const msg = (t) => ($("#f-msg").textContent = t);
@@ -549,6 +926,24 @@ async function vistaFirma() {
       } catch (ex) { msg(ex.message); }
     })
   );
+
+  $("#f-xmldsig").addEventListener("click", async () => {
+    try {
+      const r = await api("/api/firma/xmldsig");
+      $("#f-xmldsig-out").innerHTML = `
+        <div class="aviso">Firma ${r.valida ? "válida" : "inválida"} · ${esc(r.algoritmo)}</div>
+        <div class="kv" style="margin-top:10px">
+          <div><span>Origen</span><span>${esc(r.origen)}</span></div>
+          <div><span>Emisor</span><span class="mono">${esc(r.emisor)}</span></div>
+          <div><span>Raíz de confianza</span><span class="mono">${esc(r.raiz || "—")}</span></div>
+          <div><span>Cadena</span><span class="badge ${r.cadena_valida ? "ok" : "no"}">${r.cadena_valida ? "verificada contra la CA" : "no verificable"}</span></div>
+          <div><span>Huella</span><span class="mono">${esc(r.huella)}</span></div>
+        </div>
+        <pre style="max-height:260px;overflow:auto;margin-top:10px">${esc(r.xml)}</pre>`;
+    } catch (ex) {
+      $("#f-xmldsig-out").innerHTML = `<div class="denegado"><pre>${esc(ex.message)}</pre></div>`;
+    }
+  });
 }
 
 /* ---------------- cifrado ---------------- */
@@ -606,10 +1001,11 @@ async function vistaCifrado() {
         <div class="kv prosa">
           <div><span>TDE</span><span>robo de disco o de backup</span></div>
           <div><span>DDM</span><span>que un usuario vea datos en pantalla</span></div>
+          <div><span>Always Encrypted</span><span>que el propio motor lea el dato</span></div>
           <div><span>Firma digital</span><span>alteración y repudio del documento</span></div>
           <div><span>Auditoría</span><span>que nadie borre huellas</span></div>
         </div>
-        <p class="muted" style="margin-top: 10px">TDE no protege de un DBA que ya está dentro de la instancia: para ese caso están el cifrado por columna y Always Encrypted.</p>
+        <p class="muted" style="margin-top: 10px">TDE no protege de un DBA que ya está dentro de la instancia: para ese caso están el cifrado por columna con clave en el motor y Always Encrypted con la clave fuera de él.</p>
       </div>
     </div>`;
 
@@ -743,4 +1139,4 @@ async function vistaColumnas() {
 }
 
 /* ---------------- inicio ---------------- */
-if (state.token) iniciar();
+iniciar();
