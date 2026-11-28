@@ -103,7 +103,7 @@ La tercera fila es la que decide: el `DELETE` por `Creada` **necesita** su índi
 | Firma XMLDSig | `valida=True`, `cadena_valida=True`, `CN=BancoAndino Root CA` |
 | Restauración en otra instancia | `ENCRYPTED · AES 256`, `DBCC CHECKDB`, conteos, firmas |
 
-Las mediciones de rendimiento se reproducen con los scripts de `tools/mediciones/`: cargan 20.000 sesiones sintéticas, conservan un respaldo de las reales y comparan estados de índices.
+Las mediciones de rendimiento se reproducen con los scripts de `tools/mediciones/`: cargan 20.000 sesiones sintéticas, conservan un respaldo de las reales y comparan estados de índices. Para correrlos hace falta un login con permisos de **`sysadmin` o `dbo`**: los scripts hacen `TRUNCATE TABLE`, `CREATE`/`DROP INDEX` y `UPDATE STATISTICS`. La cuenta de la aplicación (`app_bancoandino`) **no alcanza**: solo tiene `EXECUTE` sobre los `usp_Sesion*` y `SELECT`/`UPDATE` en `UsuariosApp`, sin DDL ni acceso directo a `SesionesApp`.
 
 ## 7. Límites que subsisten
 
