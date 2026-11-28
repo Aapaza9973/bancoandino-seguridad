@@ -36,7 +36,8 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Higiene: cerradas, vencidas por inactividad o por tiempo absoluto.
+    -- Higiene en el login, no en cada request: cerradas, vencidas por
+    -- inactividad o por tiempo absoluto.
     DELETE FROM dbo.SesionesApp
      WHERE Revocada = 1
         OR DATEADD(HOUR, @VidaAbsolutaHoras, Creada) < SYSUTCDATETIME()
@@ -55,21 +56,19 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DELETE FROM dbo.SesionesApp
-     WHERE Revocada = 1
-        OR DATEADD(HOUR, @VidaAbsolutaHoras, Creada) < SYSUTCDATETIME()
-        OR DATEADD(MINUTE, @VidaMinutos, UltimoUso) < SYSUTCDATETIME();
-
-    -- Caducidad deslizante: solo una sesion vigente se renueva.
+    -- Camino caliente: una sola escritura y ningun barrido de tabla.
+    -- La caducidad se evalua en el WHERE, asi que una sesion vencida o
+    -- revocada no se renueva ni se devuelve; sus filas se borran en el
+    -- siguiente login (usp_SesionCrear).
     UPDATE dbo.SesionesApp
        SET UltimoUso = SYSUTCDATETIME()
-     WHERE TokenHash = @TokenHash AND Revocada = 0;
-
-    SELECT Usuario, NombreCompleto, Rol, PrincipalBD,
-           CONVERT(varchar(19), Creada, 120)    AS creada,
-           CONVERT(varchar(19), UltimoUso, 120) AS ultimo_uso
-      FROM dbo.SesionesApp
-     WHERE TokenHash = @TokenHash AND Revocada = 0;
+    OUTPUT inserted.Usuario, inserted.NombreCompleto, inserted.Rol, inserted.PrincipalBD,
+           CONVERT(varchar(19), inserted.Creada, 120)    AS creada,
+           CONVERT(varchar(19), inserted.UltimoUso, 120) AS ultimo_uso
+     WHERE TokenHash = @TokenHash
+       AND Revocada = 0
+       AND DATEADD(HOUR, @VidaAbsolutaHoras, Creada) >= SYSUTCDATETIME()
+       AND DATEADD(MINUTE, @VidaMinutos, UltimoUso) >= SYSUTCDATETIME();
 END;
 GO
 
@@ -83,19 +82,39 @@ END;
 GO
 
 CREATE OR ALTER PROCEDURE dbo.usp_SesionContar
+    @VidaMinutos       INT = 30,
+    @VidaAbsolutaHoras INT = 8
 AS
 BEGIN
     SET NOCOUNT ON;
-    SELECT COUNT(*) AS vigentes FROM dbo.SesionesApp WHERE Revocada = 0;
+
+    -- Vigente = no revocada y no vencida. Las filas muertas siguen en la
+    -- tabla hasta el siguiente login, que es donde se limpian.
+    SELECT COUNT(*) AS vigentes
+      FROM dbo.SesionesApp
+     WHERE Revocada = 0
+       AND DATEADD(HOUR, @VidaAbsolutaHoras, Creada) >= SYSUTCDATETIME()
+       AND DATEADD(MINUTE, @VidaMinutos, UltimoUso) >= SYSUTCDATETIME();
 END;
 GO
 
 CREATE OR ALTER PROCEDURE dbo.usp_SesionRevocarTodas
+    @VidaMinutos       INT = 30,
+    @VidaAbsolutaHoras INT = 8
 AS
 BEGIN
     SET NOCOUNT ON;
-    DECLARE @revocadas INT = (SELECT COUNT(*) FROM dbo.SesionesApp WHERE Revocada = 0);
+
+    -- Se informan solo las que estaban vivas: las vencidas siguen en la tabla
+    -- hasta el proximo login y no son una sesion que se este cerrando.
+    DECLARE @revocadas INT = (
+        SELECT COUNT(*) FROM dbo.SesionesApp
+         WHERE Revocada = 0
+           AND DATEADD(HOUR, @VidaAbsolutaHoras, Creada) >= SYSUTCDATETIME()
+           AND DATEADD(MINUTE, @VidaMinutos, UltimoUso) >= SYSUTCDATETIME());
+
     UPDATE dbo.SesionesApp SET Revocada = 1 WHERE Revocada = 0;
+
     SELECT @revocadas AS revocadas;
 END;
 GO

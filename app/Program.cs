@@ -540,7 +540,10 @@ app.MapGet("/api/admin/estado", async (HttpContext ctx) =>
         "SELECT Usuario, NombreCompleto, PrincipalBD, Rol, Activo FROM dbo.UsuariosApp ORDER BY Rol, Usuario;");
 
     // La app no tiene SELECT sobre SesionesApp: cuenta por el procedimiento.
-    var sesionesActivas = await ConsultaAsync("EXEC dbo.usp_SesionContar;");
+    var sesionesActivas = await ConsultaAsync(
+        "EXEC dbo.usp_SesionContar @VidaMinutos, @VidaAbsolutaHoras;",
+        ("@VidaMinutos", (int)vidaSesion.TotalMinutes),
+        ("@VidaAbsolutaHoras", (int)vidaAbsoluta.TotalHours));
 
     return Results.Ok(new
     {
@@ -624,7 +627,10 @@ app.MapPost("/api/admin/revocar-sesiones", async (HttpContext ctx) =>
     if (s.Rol != "dba") return Results.Json(new { error = "Requiere rol de administración." }, statusCode: 403);
 
     // Revocación global en la tabla: alcanza a otros procesos y a otros nodos.
-    var filas = await ConsultaAsync("EXEC dbo.usp_SesionRevocarTodas;");
+    var filas = await ConsultaAsync(
+        "EXEC dbo.usp_SesionRevocarTodas @VidaMinutos, @VidaAbsolutaHoras;",
+        ("@VidaMinutos", (int)vidaSesion.TotalMinutes),
+        ("@VidaAbsolutaHoras", (int)vidaAbsoluta.TotalHours));
     var revocadas = filas.Count > 0 ? Convert.ToInt32(filas[0]["revocadas"]) : 0;
     ctx.Response.Cookies.Delete("ba_sesion");
     return Results.Ok(new { ok = true, revocadas });
