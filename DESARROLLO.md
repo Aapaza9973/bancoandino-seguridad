@@ -2,7 +2,7 @@
 
 Documento de cierre del proyecto de **Seguridad Informática**: una consola ASP.NET Core 9 contra **SQL Server 2022** donde los controles los aplica el motor, no el código. Cada consulta viaja como el usuario de base que corresponde (`EXECUTE AS USER`), así que lo que se ve en pantalla es el veredicto real de SQL Server: lo que concede, lo que enmascara y lo que niega.
 
-Repositorio: `github.com/Aapaza9973/bancoandino-seguridad` · rama `main`, nueve commits por encima del punto de partida, sincronizada con `origin/main`.
+Repositorio: `github.com/Aapaza9973/bancoandino-seguridad` · rama `main`, con los commits del desarrollo publicados por encima del punto de partida (`4d167a7`) y sincronizada con `origin/main`.
 
 ## 1. Punto de partida y objetivo
 
@@ -103,15 +103,15 @@ La tercera fila es la que decide: el `DELETE` por `Creada` **necesita** su índi
 | Firma XMLDSig | `valida=True`, `cadena_valida=True`, `CN=BancoAndino Root CA` |
 | Restauración en otra instancia | `ENCRYPTED · AES 256`, `DBCC CHECKDB`, conteos, firmas |
 
-Las mediciones de rendimiento se reproducen con los scripts de `.tmp/` (ignorado por git): cargan 20.000 sesiones sintéticas, conservan un respaldo de las reales y comparan estados de índices.
+Las mediciones de rendimiento se reproducen con los scripts de `tools/mediciones/`: cargan 20.000 sesiones sintéticas, conservan un respaldo de las reales y comparan estados de índices.
 
 ## 7. Límites que subsisten
 
 1. **Secretos de demostración en scripts SQL** (clave de la DMK, contraseña del respaldo del certificado, claves de las cuentas). Son de laboratorio; en producción van a un almacén de secretos y se rotan.
-2. **El lector de auditoría firmado tiene `CONTROL SERVER`.** Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor y debe auditarse.
+2. **El lector de auditoría firmado tiene `CONTROL SERVER`.** Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor: su uso se audita desde `AuditSpec_LectorFirmado` (`15`) y su firma debe revisarse al cambiarlo.
 3. **Always Encrypted depende del almacén de certificados de Windows.** En Linux/CI no está (`MSSQL_CERTIFICATE_STORE`); el script avisa y la prueba verifica `disponible: false` en lugar de romper.
 4. **La CA de firma es local.** El camino criptográfico es el de producción, pero el certificado lo emite `pki/crear-pki.ps1`, no una CA pública.
-5. **La corrida remota del CI depende de la facturación de GitHub.** La cuenta está bloqueada; el flujo está replicado y validado en local.
+5. **La corrida remota del CI depende de la facturación de GitHub.** La cuenta está bloqueada: las 15 corridas registradas fallan sin arrancar (sin runner, sin pasos y sin log). El flujo está replicado y validado en local.
 
 ## 8. Cómo reproducir
 
@@ -137,7 +137,7 @@ bash tools/verificar-restauracion-otra-instancia.sh
 
 ## 9. Estado del repositorio
 
-- `main` con **nueve commits** por encima del punto de partida (`4d167a7`), todos publicados en `origin/main`: seis de código, dos que agregan este documento y el que lo da de alta en el README.
+- `main` con los **commits del desarrollo** por encima del punto de partida (`4d167a7`), todos publicados en `origin/main`: seis de código y los de documentación (este archivo, el informe y sus altas en el README).
 - Árbol de trabajo limpio y sincronizado con `origin/main`.
 - La aplicación corre en `http://127.0.0.1:5080` con el preview abierto.
-- Documentación viva en el repo: `README.md` (puesta en marcha, mapa control → archivo, endpoints), este `DESARROLLO.md` (cierre, mediciones y decisiones), `MATRIZ-DE-PROTECCION.md` (§16 cierre de brechas) y `COMPARACION-CIFRADO.md`.
+- Documentación viva en el repo: `README.md` (puesta en marcha, mapa control → archivo, endpoints), este `DESARROLLO.md` (cierre, mediciones y decisiones), `INFORME.md` (entregable de la materia), `MATRIZ-DE-PROTECCION.md` (§16 cierre de brechas) y `COMPARACION-CIFRADO.md`.

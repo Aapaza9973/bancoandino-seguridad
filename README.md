@@ -188,6 +188,7 @@ Levanta un contenedor limpio, aplica la secuencia completa y corre las 24 prueba
 ## Estructura
 
 ```
+INFORME.md                Informe del proyecto (entregable de la materia)
 DESARROLLO.md             Cierre del desarrollo: limitaciones, mediciones y decisiones
 MATRIZ-DE-PROTECCION.md   Fase 1: sujetos × objetos, ACL y capacidades
 COMPARACION-CIFRADO.md    TDE vs. columna vs. frase de paso vs. Always Encrypted
@@ -197,7 +198,7 @@ app/                      API mínima + frontend estático
   sql/                    01→18 modelo de seguridad
   sql/ci/                 variantes para el contenedor de integración continua
 pki/                      scripts de CA y CMK (las claves generadas no se versionan)
-tools/                    AeSetup y verificaciones de restauración y CI
+tools/                    AeSetup, verificaciones de restauración y CI, y arnés de medición
 tests/                    xUnit contra la app en memoria (24)
 .github/workflows/        CI con SQL Server en contenedor
 api.http                  peticiones manuales
@@ -206,7 +207,7 @@ api.http                  peticiones manuales
 ## Límites que subsisten
 
 1. **Secretos de demostración en scripts SQL** (clave de la DMK, contraseña del respaldo del certificado y claves de las cuentas). Son de laboratorio y están en el repo; en producción van a un almacén de secretos y se rotan.
-2. **El lector de auditoría firmado tiene `CONTROL SERVER`** (`CertAuditoriaLogin`). Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor: debe auditarse y revisarse su firma.
+2. **El lector de auditoría firmado tiene `CONTROL SERVER`** (`CertAuditoriaLogin`). Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor: su uso se audita desde `AuditSpec_LectorFirmado` (`15_auditoria_objetos.sql`) y su firma debe revisarse al cambiarlo.
 3. **Always Encrypted depende del almacén de certificados de Windows.** Para Linux o nube hay que cambiar el proveedor a Azure Key Vault; las columnas, la CEK y la app no cambian. Además protege del motor y del backup, no del proceso que abre la CMK.
 4. **La CA de firma es local.** El camino criptográfico (certificado emitido por una CA, cadena validada con `CustomRootTrust`) es el de producción; el certificado lo emite `pki/crear-pki.ps1`, no una CA pública. La app informa `origen` y `emisor` para que no se confunda con uno emitido por una CA externa.
-5. **La corrida remota del CI depende de la facturación de GitHub.** El workflow está replicado y validado en local con `tools/verificar-ci-local.sh` (24/24 sobre un contenedor limpio).
+5. **La corrida remota del CI depende de la facturación de GitHub.** El repositorio acumula 15 corridas, todas en `failure`: el job no llega a arrancar (sin runner asignado, sin pasos y sin log), así que el bloqueo es de la cuenta, no del workflow. La lógica está replicada y validada en local con `tools/verificar-ci-local.sh` (24/24 sobre un contenedor limpio).

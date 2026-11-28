@@ -34,3 +34,28 @@ SELECT name, is_state_enabled FROM sys.database_audit_specifications;
 SELECT audit_action_name, class_desc, major_id, minor_id
 FROM sys.database_audit_specification_details ORDER BY audit_action_name;
 GO
+
+/* El lector firmado vive en master (la aplicacion lo invoca como
+   master.dbo.usp_LeerAuditoria) y el certificado que lo firma tiene
+   CONTROL SERVER. Es un objeto de alto valor: cada uso queda auditado
+   desde una especificacion de base en master. */
+USE master;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.database_audit_specifications WHERE name = 'AuditSpec_LectorFirmado')
+BEGIN
+    ALTER DATABASE AUDIT SPECIFICATION AuditSpec_LectorFirmado WITH (STATE = OFF);
+    DROP DATABASE AUDIT SPECIFICATION AuditSpec_LectorFirmado;
+END
+GO
+
+CREATE DATABASE AUDIT SPECIFICATION AuditSpec_LectorFirmado
+FOR SERVER AUDIT Audit_BancoAndino
+ADD (EXECUTE ON OBJECT::dbo.usp_LeerAuditoria BY public)
+WITH (STATE = ON);
+GO
+
+SELECT name, is_state_enabled FROM sys.database_audit_specifications WHERE name = 'AuditSpec_LectorFirmado';
+SELECT audit_action_name, class_desc, major_id, minor_id
+FROM sys.database_audit_specification_details ORDER BY audit_action_name;
+GO
