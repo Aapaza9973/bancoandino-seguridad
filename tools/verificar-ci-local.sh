@@ -50,7 +50,7 @@ MSYS2_ARG_CONV_EXCL='*' docker exec -u root "$CONTENEDOR" chown mssql:mssql "$AU
 echo "== 3/5 Esquema, seguridad y auditoria"
 for archivo in 01_esquema.sql 03_usuarios_app.sql 05_firma_transacciones.sql \
                06_cifrado_columnas.sql 10_demo_sqli.sql 13_admin_procs.sql \
-               17_sesiones.sql 18_metadatos.sql; do
+               17_sesiones.sql 18_metadatos.sql 19_altas.sql; do
   echo "   $archivo"
   MSYS2_ARG_CONV_EXCL='*' docker exec -i "$CONTENEDOR" "$SQLCMD" \
     -S localhost -U sa -P "$SA_PASS" -C -b < "app/sql/$archivo" > /dev/null

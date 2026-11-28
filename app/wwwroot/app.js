@@ -1,5 +1,6 @@
 const state = { sesion: null };
 let avisoAdmin = "";
+let enVivo = null; // EventSource de /api/eventos (altas en vivo)
 
 const $ = (sel) => document.querySelector(sel);
 const movimientoReducido = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -38,6 +39,7 @@ $("#form-login").addEventListener("submit", async (e) => {
 });
 
 $("#btn-salir").addEventListener("click", async () => {
+  cerrarEnVivo();
   try { await api("/api/logout", { method: "POST" }); } catch {}
   state.sesion = null;
   avisoAdmin = "";
@@ -79,6 +81,7 @@ function pintarNav() {
   if (s.rol === "cajero" || s.rol === "riesgos" || s.rol === "dba") items.push(["ae", "Always Encrypted"]);
   if (s.rol === "auditor" || s.rol === "dba") items.push(["metadatos", "Metadatos y ACL"]);
   if (s.rol === "auditor" || s.rol === "dba") items.push(["auditoria", "Auditoría"]);
+  if (s.rol === "cajero" || s.rol === "supervisor" || s.rol === "dba") items.push(["altas", "Altas en vivo"]);
   if (s.rol === "dba") items.push(["sqli", "SQL injection"], ["administracion", "Administración"]);
 
   $("#nav").innerHTML = items
@@ -100,6 +103,7 @@ function marcarNav(vista) {
 }
 
 function ir(vista) {
+  cerrarEnVivo();
   if (vista !== "administracion") avisoAdmin = "";
   marcarNav(vista);
   if (vista === "resumen") return vistaResumen();
@@ -112,6 +116,7 @@ function ir(vista) {
   if (vista === "ae") return vistaAe();
   if (vista === "inferencia") return vistaInferencia();
   if (vista === "sqli") return vistaSqli();
+  if (vista === "altas") return vistaAltas();
   return vistaTabla(vista);
 }
 
@@ -1136,6 +1141,173 @@ async function vistaColumnas() {
       caja.scrollIntoView({ block: "nearest", behavior: movimientoReducido() ? "auto" : "smooth" });
     })
   );
+}
+
+/* ---------------- altas con actualización en vivo ---------------- */
+const altasDef = {
+  clientes: {
+    tabla: "clientes",
+    db: "dbo.Clientes",
+    ruta: "/api/clientes",
+    titulo: "Nuevo cliente",
+    id: "clienteId",
+    campos: [
+      ["nombre", "Nombre", "text", "Ana Quispe"],
+      ["ci", "CI", "text", "1122334"],
+      ["email", "Email", "email", "ana@correo.bo"],
+      ["telefono", "Teléfono", "text", "71234567"],
+      ["tarjeta", "Tarjeta", "text", "4532-0000-0000-9999"],
+      ["saldo", "Saldo", "number", "0"],
+    ],
+  },
+  empleados: {
+    tabla: "empleados",
+    db: "dbo.Empleados",
+    ruta: "/api/empleados",
+    titulo: "Nuevo empleado",
+    id: "empleadoId",
+    campos: [
+      ["nombre", "Nombre", "text", "Carlos Flores"],
+      ["ci", "CI", "text", "1122334"],
+      ["cargo", "Cargo", "text", "Cajero"],
+      ["salario", "Salario", "number", "4800"],
+      ["email", "Email corporativo", "email", "c.flores@bancoandino.bo"],
+    ],
+  },
+};
+
+function cerrarEnVivo() {
+  if (enVivo) {
+    enVivo.close();
+    enVivo = null;
+  }
+}
+
+function formularioAlta(def, habilitado) {
+  const campos = def.campos
+    .map(([id, etiqueta, tipo, ejemplo]) => `
+      <div class="campo">
+        <label for="alta-${def.tabla}-${id}">${etiqueta}</label>
+        <input id="alta-${def.tabla}-${id}" name="${id}" type="${tipo}" placeholder="${ejemplo}"
+               ${tipo === "number" ? 'step="0.01" min="0"' : ""} ${habilitado ? "" : "disabled"} />
+      </div>`)
+    .join("");
+
+  return `
+    <div class="card">
+      <div class="row" style="justify-content: space-between">
+        <h3>${def.titulo}</h3>
+        <span class="badge ${habilitado ? "ok" : "no"}">${habilitado ? "INSERT permitido" : "sin INSERT"}</span>
+      </div>
+      <form class="fichas" data-alta="${def.tabla}">
+        ${campos}
+        <div class="campo">
+          <button class="primary mini" type="submit" ${habilitado ? "" : "disabled"}>Guardar</button>
+        </div>
+      </form>
+      <p class="muted" data-msg="${def.tabla}"></p>
+      <div data-lista="${def.tabla}"><p class="muted">Cargando…</p></div>
+    </div>`;
+}
+
+function listaMini(filas) {
+  if (!filas.length) return `<p class="muted">Sin filas visibles.</p>`;
+  const cols = Object.keys(filas[0]).slice(0, 4);
+  const cuerpo = filas
+    .map((f) => `<tr>${cols.map((c) => `<td class="${typeof f[c] === "number" ? "num" : ""}">${esc(f[c])}</td>`).join("")}</tr>`)
+    .join("");
+  return `
+    <div class="tabla-wrap" style="margin-top: 10px">
+      <table class="datos">
+        <thead><tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+        <tbody>${cuerpo}</tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top: 8px">${filas.length} registros · se refresca solo con cada alta confirmada.</p>`;
+}
+
+async function vistaAltas() {
+  cerrarEnVivo();
+  $("#vista").innerHTML = `<div class="card"><p class="muted">Cargando altas y listas en vivo…</p></div>`;
+
+  const defs = [altasDef.clientes, altasDef.empleados];
+  const estado = {};
+  await Promise.all(
+    defs.map(async (def) => {
+      try {
+        estado[def.tabla] = await api(`/api/datos/${def.tabla}`);
+      } catch (ex) {
+        estado[def.tabla] = { ...(ex.data || {}), filas: [], error: ex.message };
+      }
+    })
+  );
+
+  $("#vista").innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content: space-between">
+        <h3>Altas con actualización en vivo</h3>
+        <span class="badge ok" id="altas-vivo">en vivo</span>
+      </div>
+      <p class="muted">El alta viaja como tu principal de base: si el motor no concede <span class="mono">INSERT</span>, responde con el error 229. Cada alta confirmada se anuncia por <span class="mono">/api/eventos</span> (Server-Sent Events) y las dos listas se refrescan sin recargar la página.</p>
+    </div>
+    <div class="grid-2">
+      ${defs.map((def) => formularioAlta(def, Boolean(estado[def.tabla].puede_insertar))).join("")}
+    </div>`;
+
+  const pintarLista = async (def) => {
+    const caja = document.querySelector(`[data-lista="${def.tabla}"]`);
+    if (!caja) return;
+    try {
+      const d = await api(`/api/datos/${def.tabla}`);
+      const filas = d.filas || [];
+      const clave = filas.length ? Object.keys(filas[0])[0] : null;
+      const ultimas = clave
+        ? [...filas].sort((a, b) => Number(b[clave] ?? 0) - Number(a[clave] ?? 0)).slice(0, 5)
+        : [];
+      caja.innerHTML = listaMini(ultimas);
+    } catch (ex) {
+      caja.innerHTML = `<div class="denegado"><pre>${esc(ex.message)}</pre></div>`;
+    }
+  };
+
+  const marcarVivo = (texto) => {
+    const b = $("#altas-vivo");
+    if (b) b.textContent = texto;
+  };
+
+  document.querySelectorAll("form[data-alta]").forEach((form) => {
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const def = form.dataset.alta === "clientes" ? altasDef.clientes : altasDef.empleados;
+      const msg = document.querySelector(`[data-msg="${def.tabla}"]`);
+      const cuerpo = {};
+      def.campos.forEach(([id, , tipo]) => {
+        const valor = form.querySelector(`[name="${id}"]`).value;
+        cuerpo[id] = tipo === "number" ? Number(valor) : valor;
+      });
+      try {
+        const r = await api(def.ruta, { method: "POST", body: JSON.stringify(cuerpo) });
+        msg.textContent = `Guardado: ${def.id === "clienteId" ? "cliente" : "empleado"} ${r[def.id]}.`;
+        form.reset();
+        await pintarLista(def);
+      } catch (ex) {
+        msg.textContent = ex.message;
+      }
+    });
+  });
+
+  await Promise.all(defs.map(pintarLista));
+
+  enVivo = new EventSource("/api/eventos");
+  enVivo.addEventListener("open", () => marcarVivo("en vivo"));
+  enVivo.addEventListener("cambio", (e) => {
+    let aviso;
+    try { aviso = JSON.parse(e.data); } catch { return; }
+    const def = defs.find((d) => d.db === aviso.tabla);
+    if (def) pintarLista(def);
+    marcarVivo(`${aviso.tabla} actualizado · ${new Date().toLocaleTimeString()}`);
+  });
+  enVivo.addEventListener("error", () => marcarVivo("reconectando…"));
 }
 
 /* ---------------- inicio ---------------- */

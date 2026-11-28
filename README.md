@@ -42,6 +42,7 @@ Ejecutar como `sysadmin` (SSMS, o `sqlcmd -S localhost -E -i archivo.sql`), **en
 | `app/sql/16_always_encrypted.sql` | `dbo.ClientesAE` con `CI` determinista y nombre/saldo/tarjeta aleatorios, más los permisos. Idempotente: si no hay CEK, avisa y no falla (así corre en el CI de Linux). |
 | `app/sql/17_sesiones.sql` | `dbo.SesionesApp` + `usp_SesionCrear/Validar/Cerrar/RevocarTodas`: la sesión deja de vivir en el proceso. |
 | `app/sql/18_metadatos.sql` | `VIEW DEFINITION` para `rol_auditor` y verificación en su contexto (cierre de B5). |
+| `app/sql/19_altas.sql` | `INSERT` para `rol_cajero` en `Clientes` y para `rol_supervisor` en `Empleados` (con `SELECT` sin `Salario`): el alta de la consola la autoriza el motor. Idempotente. |
 
 ### 0.1 Claves del cliente: PKI de firma y Always Encrypted
 

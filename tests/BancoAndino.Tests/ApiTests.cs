@@ -247,9 +247,27 @@ public class ApiTests : IClassFixture<Fabrica>
         var ex = await EjecutarComoAsync("supervisor_luis", "SELECT TOP 1 NumeroTarjeta FROM dbo.Clientes;");
         Assert.Equal(230, ex.Number);
 
-        // Empleados sigue sin permiso: el motor lo rechaza antes de consultar.
+        // Empleados: el supervisor da de alta y lee, pero el salario sigue
+        // denegado por columna (19_altas.sql). Dar de alta clientes, no.
         var empleados = await c.GetAsync("/api/datos/empleados");
-        Assert.Equal(HttpStatusCode.Forbidden, empleados.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, empleados.StatusCode);
+        var cuerpoEmpleados = await JsonAsync(empleados);
+        var columnasEmpleados = cuerpoEmpleados.GetProperty("filas")[0]
+            .EnumerateObject().Select(p => p.Name).ToList();
+        Assert.DoesNotContain("Salario", columnasEmpleados);
+        Assert.Contains("Salario",
+            cuerpoEmpleados.GetProperty("columnas_ocultas").EnumerateArray().Select(x => x.GetString()!));
+        Assert.True(cuerpoEmpleados.GetProperty("puede_insertar").GetBoolean());
+
+        var exSalario = await EjecutarComoAsync("supervisor_luis", "SELECT TOP 1 Salario FROM dbo.Empleados;");
+        Assert.Equal(230, exSalario.Number);
+
+        var altaClientes = await c.PostAsJsonAsync("/api/clientes", new
+        {
+            nombre = "Cliente de prueba", ci = "1234567", email = "prueba@correo.bo",
+            telefono = "70000000", tarjeta = "4532-0000-0000-0000", saldo = 10m
+        });
+        Assert.Equal(HttpStatusCode.Forbidden, altaClientes.StatusCode);
     }
 
     // ---------- inferencia, SQLi, auditoría y mínimo privilegio ----------

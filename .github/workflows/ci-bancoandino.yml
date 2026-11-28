@@ -57,7 +57,7 @@ jobs:
 
       - name: Crear la base con el modelo de seguridad
         run: |
-          for archivo in 01_esquema.sql 03_usuarios_app.sql 05_firma_transacciones.sql 06_cifrado_columnas.sql 10_demo_sqli.sql 13_admin_procs.sql 17_sesiones.sql 18_metadatos.sql; do
+          for archivo in 01_esquema.sql 03_usuarios_app.sql 05_firma_transacciones.sql 06_cifrado_columnas.sql 10_demo_sqli.sql 13_admin_procs.sql 17_sesiones.sql 18_metadatos.sql 19_altas.sql; do
             echo "== $archivo"
             docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < "app/sql/$archivo"
           done

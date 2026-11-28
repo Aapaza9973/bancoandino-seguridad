@@ -2,7 +2,9 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography.Xml;
+using System.Collections.Concurrent;
 using System.Text;
+using System.Threading.Channels;
 using System.Xml;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -89,6 +91,18 @@ var funciones = new[]
 
 var permisosValidos = new[] { "SELECT", "INSERT", "UPDATE", "DELETE" };
 var accionesValidas = new[] { "GRANT", "DENY", "REVOKE" };
+
+// Avisos en vivo: cada pestaña suscrita a /api/eventos recibe la tabla que
+// cambió. Vive en el proceso, que es quien sirve la consola.
+var oyentes = new ConcurrentDictionary<Guid, Channel<string>>();
+
+void Avisar(string tabla)
+{
+    var aviso = System.Text.Json.JsonSerializer.Serialize(new { tabla, accion = "alta" });
+    foreach (var (id, canal) in oyentes)
+        if (!canal.Writer.TryWrite(aviso))
+            oyentes.TryRemove(id, out _);
+}
 
 // ---------- utilidades de datos ----------
 static async Task<List<Dictionary<string, object?>>> LeerAsync(SqlCommand cmd)
@@ -184,6 +198,36 @@ static async Task<List<string>> ColumnasVisiblesAsync(string principal, string t
              AND HAS_PERMS_BY_NAME('{tabla}', 'OBJECT', 'SELECT', c.name, 'COLUMN') = 1
            ORDER BY c.column_id;");
     return filas.Select(f => (string)f["columna"]!).ToList();
+}
+
+/// Inserta como el usuario de la base (EXECUTE AS USER): el permiso lo decide
+/// el motor, no la aplicación. Devuelve el identificador generado.
+async Task<int> InsertarComoAsync(string principal, string sql, Action<SqlParameterCollection> parametros)
+{
+    await using var cn = new SqlConnection(Bd.ConnectionString);
+    await cn.OpenAsync();
+
+    await using (var imp = new SqlCommand("EXECUTE AS USER = @u;", cn))
+    {
+        imp.Parameters.Add("@u", SqlDbType.NVarChar, 128).Value = principal;
+        await imp.ExecuteNonQueryAsync();
+    }
+
+    try
+    {
+        await using var cmd = new SqlCommand(sql, cn);
+        parametros(cmd.Parameters);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+    finally
+    {
+        try
+        {
+            await using var revert = new SqlCommand("REVERT;", cn);
+            await revert.ExecuteNonQueryAsync();
+        }
+        catch { /* la conexión se descarta */ }
+    }
 }
 
 static async Task EjecutarAsync(string sql, params (string, object?)[] ps)
@@ -419,7 +463,14 @@ app.MapGet("/api/datos/{tabla}", async (string tabla, HttpContext ctx) =>
 
         var lista = string.Join(", ", visibles.Select(c => $"[{c}]"));
         var filas = await ConsultaComoAsync(s.Principal, $"SELECT TOP 100 {lista} FROM {nombre};");
-        return Results.Ok(new { tabla = nombre, principal = s.Principal, filas, columnas_ocultas = ocultas });
+        // El alta se ofrece solo si el motor concede INSERT a este principal.
+        var puede = await ConsultaComoAsync(s.Principal,
+            $"SELECT HAS_PERMS_BY_NAME('{nombre}', 'OBJECT', 'INSERT') AS puede;");
+        return Results.Ok(new
+        {
+            tabla = nombre, principal = s.Principal, filas, columnas_ocultas = ocultas,
+            puede_insertar = puede.Count > 0 && Convert.ToInt32(puede[0]["puede"]) == 1
+        });
     }
     catch (SqlException ex)
     {
@@ -1123,6 +1174,174 @@ app.MapPost("/api/ae/guardar", async (ClienteAeDto dto, HttpContext ctx) =>
     }
 });
 
+// ---------- altas de clientes y empleados ----------
+// El INSERT viaja como el principal de la sesión: sin INSERT en la tabla, el
+// motor responde 229 y se devuelve 403. Cada alta confirmada se anuncia a las
+// pestañas abiertas para que las listas se refresquen sin recargar.
+app.MapPost("/api/clientes", async (ClienteDto dto, HttpContext ctx) =>
+{
+    var s = await SesionDeAsync(ctx);
+    if (s is null) return Results.Json(new { error = "No autenticado." }, statusCode: 401);
+
+    var nombre = (dto.Nombre ?? "").Trim();
+    var ci = (dto.Ci ?? "").Trim();
+    var email = (dto.Email ?? "").Trim();
+    var telefono = (dto.Telefono ?? "").Trim();
+    var tarjeta = (dto.Tarjeta ?? "").Trim();
+
+    if (nombre.Length is < 3 or > 100)
+        return Results.BadRequest(new { error = "El nombre debe tener entre 3 y 100 caracteres." });
+    if (ci.Length is < 7 or > 9 || !ci.All(char.IsDigit))
+        return Results.BadRequest(new { error = "La CI debe tener entre 7 y 9 dígitos." });
+    if (email.Length is < 5 or > 150 || !email.Contains('@'))
+        return Results.BadRequest(new { error = "El email no es válido." });
+    if (telefono.Length != 8 || !telefono.All(char.IsDigit))
+        return Results.BadRequest(new { error = "El teléfono debe tener 8 dígitos." });
+    if (tarjeta.Length is < 12 or > 19 || !tarjeta.All(c => char.IsDigit(c) || c == '-'))
+        return Results.BadRequest(new { error = "La tarjeta debe tener entre 12 y 19 caracteres (dígitos y guiones)." });
+    if (dto.Saldo < 0 || dto.Saldo > 9_999_999_999.99m)
+        return Results.BadRequest(new { error = "El saldo debe estar entre 0 y 9.999.999.999,99." });
+
+    try
+    {
+        var id = await InsertarComoAsync(s.Principal,
+            @"SET NOCOUNT ON;
+              INSERT INTO dbo.Clientes (Nombre, CI, Email, Telefono, NumeroTarjeta, SaldoCuenta)
+              OUTPUT INSERTED.ClienteID
+              VALUES (@nombre, @ci, @email, @telefono, @tarjeta, @saldo);",
+            ps =>
+            {
+                ps.Add("@nombre", SqlDbType.NVarChar, 100).Value = nombre;
+                ps.Add("@ci", SqlDbType.Char, 9).Value = ci;
+                ps.Add("@email", SqlDbType.NVarChar, 150).Value = email;
+                ps.Add("@telefono", SqlDbType.Char, 8).Value = telefono;
+                ps.Add("@tarjeta", SqlDbType.Char, 19).Value = tarjeta;
+                var saldo = ps.Add("@saldo", SqlDbType.Decimal);
+                saldo.Precision = 12;
+                saldo.Scale = 2;
+                saldo.Value = dto.Saldo;
+            });
+
+        Avisar("dbo.Clientes");
+        return Results.Created("/api/datos/clientes", new { ok = true, clienteId = id, tabla = "dbo.Clientes" });
+    }
+    catch (SqlException ex) when (ex.Number is 229 or 230)
+    {
+        return Results.Json(new { error = ex.Message, principal = s.Principal }, statusCode: 403);
+    }
+    catch (SqlException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 400);
+    }
+});
+
+app.MapPost("/api/empleados", async (EmpleadoDto dto, HttpContext ctx) =>
+{
+    var s = await SesionDeAsync(ctx);
+    if (s is null) return Results.Json(new { error = "No autenticado." }, statusCode: 401);
+
+    var nombre = (dto.Nombre ?? "").Trim();
+    var ci = (dto.Ci ?? "").Trim();
+    var cargo = (dto.Cargo ?? "").Trim();
+    var email = (dto.Email ?? "").Trim();
+
+    if (nombre.Length is < 3 or > 100)
+        return Results.BadRequest(new { error = "El nombre debe tener entre 3 y 100 caracteres." });
+    if (ci.Length is < 7 or > 9 || !ci.All(char.IsDigit))
+        return Results.BadRequest(new { error = "La CI debe tener entre 7 y 9 dígitos." });
+    if (cargo.Length is < 3 or > 60)
+        return Results.BadRequest(new { error = "El cargo debe tener entre 3 y 60 caracteres." });
+    if (email.Length is < 5 or > 150 || !email.Contains('@'))
+        return Results.BadRequest(new { error = "El email corporativo no es válido." });
+    if (dto.Salario <= 0 || dto.Salario > 99_999_999.99m)
+        return Results.BadRequest(new { error = "El salario debe ser mayor a cero y menor a 100.000.000." });
+
+    try
+    {
+        var id = await InsertarComoAsync(s.Principal,
+            @"SET NOCOUNT ON;
+              INSERT INTO dbo.Empleados (Nombre, CI, Cargo, Salario, EmailCorporativo)
+              OUTPUT INSERTED.EmpleadoID
+              VALUES (@nombre, @ci, @cargo, @salario, @email);",
+            ps =>
+            {
+                ps.Add("@nombre", SqlDbType.NVarChar, 100).Value = nombre;
+                ps.Add("@ci", SqlDbType.Char, 9).Value = ci;
+                ps.Add("@cargo", SqlDbType.NVarChar, 60).Value = cargo;
+                var salario = ps.Add("@salario", SqlDbType.Decimal);
+                salario.Precision = 10;
+                salario.Scale = 2;
+                salario.Value = dto.Salario;
+                ps.Add("@email", SqlDbType.NVarChar, 150).Value = email;
+            });
+
+        Avisar("dbo.Empleados");
+        return Results.Created("/api/datos/empleados", new { ok = true, empleadoId = id, tabla = "dbo.Empleados" });
+    }
+    catch (SqlException ex) when (ex.Number is 229 or 230)
+    {
+        return Results.Json(new { error = ex.Message, principal = s.Principal }, statusCode: 403);
+    }
+    catch (SqlException ex)
+    {
+        return Results.Json(new { error = ex.Message }, statusCode: 400);
+    }
+});
+
+// ---------- avisos en vivo (Server-Sent Events) ----------
+// Una conexión por pestaña; el servidor empuja el nombre de la tabla cuando hay
+// un alta. Un latido cada 20 s mantiene viva la conexión y detecta al cliente.
+app.MapGet("/api/eventos", async (HttpContext ctx) =>
+{
+    var s = await SesionDeAsync(ctx);
+    if (s is null)
+    {
+        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        await ctx.Response.WriteAsJsonAsync(new { error = "No autenticado." });
+        return;
+    }
+
+    ctx.Response.ContentType = "text/event-stream";
+    ctx.Response.Headers.CacheControl = "no-cache";
+    ctx.Response.Headers["X-Accel-Buffering"] = "no";
+
+    var canal = Channel.CreateBounded<string>(new BoundedChannelOptions(16)
+    {
+        FullMode = BoundedChannelFullMode.DropOldest
+    });
+    var id = Guid.NewGuid();
+    oyentes[id] = canal;
+
+    try
+    {
+        await ctx.Response.WriteAsync(": conectado\n\n");
+        await ctx.Response.Body.FlushAsync();
+
+        while (!ctx.RequestAborted.IsCancellationRequested)
+        {
+            string? aviso = null;
+            using (var espera = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted))
+            {
+                espera.CancelAfter(TimeSpan.FromSeconds(20));
+                try { aviso = await canal.Reader.ReadAsync(espera.Token); }
+                catch (OperationCanceledException) when (!ctx.RequestAborted.IsCancellationRequested) { }
+            }
+
+            await ctx.Response.WriteAsync(aviso is null
+                ? ": latido\n\n"
+                : $"event: cambio\ndata: {aviso}\n\n");
+            await ctx.Response.Body.FlushAsync();
+        }
+    }
+    catch (OperationCanceledException) { }
+    catch (IOException) { }
+    finally
+    {
+        oyentes.TryRemove(id, out _);
+        canal.Writer.TryComplete();
+    }
+});
+
 // ---------- demostraciones de laboratorio ----------
 
 // Inferencia por WHERE: el predicado usa el saldo real aunque la salida
@@ -1195,6 +1414,8 @@ record DocDto(int DocId);
 record TarjetaDto(int ClienteId, string? Numero, string? Cvv);
 record TarjetaIdDto(int TarjetaId);
 record ClienteAeDto(string? Ci, string? Nombre, decimal Saldo, string? Tarjeta);
+record ClienteDto(string? Nombre, string? Ci, string? Email, string? Telefono, string? Tarjeta, decimal Saldo);
+record EmpleadoDto(string? Nombre, string? Ci, string? Cargo, decimal Salario, string? Email);
 
 record Sesion(string Usuario, string Nombre, string Rol, string Principal)
 {
