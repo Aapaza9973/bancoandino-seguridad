@@ -1,0 +1,36 @@
+/* =========================================================
+   Auditoria consolidada de datos - BancoAndino
+   SQL Server permite una sola especificacion de base por
+   audit, asi que se reemplaza la de 02 por la version completa.
+   Ejecutar despues de 06_cifrado_columnas.sql.
+   ========================================================= */
+USE BancoAndino;
+GO
+
+IF EXISTS (SELECT 1 FROM sys.database_audit_specifications WHERE name = 'AuditSpec_DatosSensibles')
+BEGIN
+    ALTER DATABASE AUDIT SPECIFICATION AuditSpec_DatosSensibles WITH (STATE = OFF);
+    DROP DATABASE AUDIT SPECIFICATION AuditSpec_DatosSensibles;
+END
+GO
+
+CREATE DATABASE AUDIT SPECIFICATION AuditSpec_DatosSensibles
+FOR SERVER AUDIT Audit_BancoAndino
+ADD (SELECT ON dbo.Clientes             BY public),
+ADD (SELECT ON dbo.Empleados            BY public),
+ADD (SELECT ON dbo.Transacciones        BY public),
+ADD (SELECT ON dbo.TarjetasCifradas     BY public),
+ADD (SELECT ON dbo.TransaccionesFirmadas BY public),
+ADD (SELECT ON dbo.UsuariosApp          BY public),
+ADD (EXECUTE ON OBJECT::dbo.usp_DescifrarTarjeta BY public),
+ADD (DATABASE_PERMISSION_CHANGE_GROUP),
+ADD (DATABASE_OBJECT_CHANGE_GROUP),
+ADD (DATABASE_ROLE_MEMBER_CHANGE_GROUP),
+ADD (SCHEMA_OBJECT_CHANGE_GROUP)
+WITH (STATE = ON);
+GO
+
+SELECT name, is_state_enabled FROM sys.database_audit_specifications;
+SELECT audit_action_name, class_desc, major_id, minor_id
+FROM sys.database_audit_specification_details ORDER BY audit_action_name;
+GO
