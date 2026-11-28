@@ -3,6 +3,21 @@
 set -u
 cd "$(dirname "$0")"
 LOG=medicion-plan.log
+
+# Aborta antes de tocar SesionesApp si el login no tiene DDL: el arnes hace
+# TRUNCATE TABLE, CREATE/DROP INDEX y UPDATE STATISTICS. app_bancoandino no alcanza.
+exigir_permisos() {
+    local salida estado
+    salida=$(MSYS2_ARG_CONV_EXCL='*' sqlcmd -S localhost -d BancoAndino -b -W -h -1 -I -i 00_verificar_permisos.sql 2>&1)
+    estado=$?
+    if [ "$estado" -ne 0 ]; then
+        printf '%s\n' "$salida" | sed '/Changed database context/d; /^$/d; s/\r$//'
+        echo "ABORTA: dbo.SesionesApp quedo intacta. Usa un login sysadmin o dbo." >&2
+        exit 1
+    fi
+}
+
+exigir_permisos
 : > "$LOG"
 
 run() { MSYS2_ARG_CONV_EXCL='*' sqlcmd -S localhost -d BancoAndino -b -W -I -i "$1" >>"$LOG" 2>&1; }
