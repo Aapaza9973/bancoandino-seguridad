@@ -8,7 +8,7 @@ El proyecto construye una consola de seguridad sobre una base bancaria ficticia 
 
 Sobre una única base se demuestran y verifican: matriz de protección con ACL y capacidades, mínimo privilegio efectivo (la aplicación no es `sysadmin` ni `db_owner`), permisos por columna, enmascaramiento dinámico y su inferencia por `WHERE`, inyección SQL comparada, auditoría a archivo con accesos denegados, TDE, cifrado por columna, frase de paso, Always Encrypted con la clave maestra fuera del motor, firma digital con cadena de CA, contraseñas PBKDF2, sesión persistida en la base con revocación global, y restauración verificada en otra instancia.
 
-**Resultado:** 24 pruebas automatizadas en verde (24/24 también en un contenedor limpio), las seis brechas de privilegios cerradas y seis limitaciones documentadas resueltas. El trabajo quedó en la rama `main`, con la documentación del repositorio actualizada.
+**Resultado:** 26 pruebas automatizadas en verde (26/26 también en un contenedor limpio), las seis brechas de privilegios cerradas y seis limitaciones documentadas resueltas. El trabajo quedó en la rama `main`, con la documentación del repositorio actualizada.
 
 ## 1. Introducción
 
@@ -150,9 +150,9 @@ El arnés que produce estas cifras está versionado en `tools/mediciones/` (`med
 
 ### 6.4 Verificación automatizada
 
-24 pruebas contra la aplicación en memoria (`TestServer`) y el SQL Server real, en dos archivos: `ApiTests.cs` (19) y `LimitacionesTests.cs` (5). Cubren login PBKDF2 y bloqueo, cookie `HttpOnly`, 401 sin token, permisos por columna, DDM real vs. enmascarado, descifrado permitido y denegado, TDE, firmas, XMLDSig con CA, inferencia, SQLi, auditoría con denegados, metadatos del auditor, sesión entre procesos, revocación global y Always Encrypted.
+26 pruebas contra la aplicación en memoria (`TestServer`) y el SQL Server real, en tres archivos: `ApiTests.cs` (19), `LimitacionesTests.cs` (5) y `AltasTests.cs` (2). Cubren login PBKDF2 y bloqueo, cookie `HttpOnly`, 401 sin token, permisos por columna, DDM real vs. enmascarado, descifrado permitido y denegado, TDE, firmas, XMLDSig con CA, inferencia, SQLi, auditoría con denegados, metadatos del auditor, sesión entre procesos, revocación global y Always Encrypted.
 
-Resultado: **24/24** en la instancia local y **24/24** en un contenedor limpio con `tools/verificar-ci-local.sh`. Always Encrypted se omite en Linux por falta del almacén de certificados; la prueba correspondiente verifica que el endpoint informa `disponible: false` en lugar de romper.
+Resultado: **26/26** en la instancia local y **26/26** en un contenedor limpio con `tools/verificar-ci-local.sh`. Always Encrypted se omite en Linux por falta del almacén de certificados; la prueba correspondiente verifica que el endpoint informa `disponible: false` en lugar de romper.
 
 ## 7. Discusión
 
@@ -181,7 +181,7 @@ Resultado: **24/24** en la instancia local y **24/24** en un contenedor limpio c
 | Secretos de demostración en los scripts (DMK, respaldo del certificado, cuentas) | Aceptable en laboratorio | Almacén de secretos y rotación |
 | Always Encrypted depende del almacén de certificados de Windows | No corre en Linux ni en la nube | Cambiar el proveedor a Azure Key Vault; columnas, CEK y app no cambian |
 | La CA de firma es local | No acredita identidad ante terceros | Emitir el certificado desde una CA reconocida |
-| La corrida remota del CI no llega a ejecutarse | El job no arranca en GitHub | Reactivar la cuenta; la lógica ya está validada en local (24/24) |
+| La corrida remota del CI no llega a ejecutarse | El job no arranca en GitHub | Reactivar la cuenta; la lógica ya está validada en local (26/26) |
 
 Dos limitaciones que este informe listaba al principio quedaron cerradas al preparar la entrega:
 
@@ -223,7 +223,7 @@ Cuentas de demostración: `ana`, `luis`, `maria`, `sofia`, `admin` (claves PBKDF
 | `app/wwwroot/` | Consola: pantallas por rol |
 | `pki/` | CA raíz, certificado de firma y CMK |
 | `tools/` | `AeSetup`, verificaciones de restauración y CI, y el arnés de medición |
-| `tests/` | 24 pruebas xUnit |
+| `tests/` | 26 pruebas xUnit |
 | `README.md` | Puesta en marcha, mapa control → archivo y límites |
 | `DESARROLLO.md` | Historia del desarrollo, mediciones y decisiones |
 | `MATRIZ-DE-PROTECCION.md` | Sujetos × objetos, ACL y capacidades |

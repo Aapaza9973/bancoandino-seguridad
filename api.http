@@ -34,12 +34,61 @@ Content-Type: application/json
   "password": "Dba_Admin_2027#"
 }
 
+### Login como supervisor (da de alta empleados)
+# @name loginSupervisor
+POST {{host}}/api/login
+Content-Type: application/json
+
+{
+  "usuario": "luis",
+  "password": "Super_Luis_2027#"
+}
+
 ### Salud del servicio: requiere token (sin Authorization devuelve 401)
 GET {{host}}/api/salud
 Authorization: Bearer {{login.response.body.$.token}}
 
 ### Sesión actual: usuario, rol, permisos y UNMASK
 GET {{host}}/api/sesion
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Clientes: lectura + puede_insertar (ordena por la clave primaria, más reciente primero)
+GET {{host}}/api/datos/clientes
+Authorization: Bearer {{login.response.body.$.token}}
+
+### Empleados: lectura como supervisor, sin la columna Salario
+GET {{host}}/api/datos/empleados
+Authorization: Bearer {{loginSupervisor.response.body.$.token}}
+
+### Alta de cliente como cajero -> 201, fila persistida y aviso SSE
+POST {{host}}/api/clientes
+Content-Type: application/json
+Authorization: Bearer {{login.response.body.$.token}}
+
+{
+  "nombre": "Cliente de prueba",
+  "ci": "7654321",
+  "email": "cliente.prueba@correo.bo",
+  "telefono": "71234567",
+  "tarjeta": "4532-0000-0000-0000",
+  "saldo": 1500.00
+}
+
+### Alta de empleado como supervisor -> 201, fila persistida y aviso SSE
+POST {{host}}/api/empleados
+Content-Type: application/json
+Authorization: Bearer {{loginSupervisor.response.body.$.token}}
+
+{
+  "nombre": "Empleado de prueba",
+  "ci": "7654322",
+  "cargo": "Cajero",
+  "salario": 4800.00,
+  "email": "empleado.prueba@bancoandino.bo"
+}
+
+### Avisos en vivo (SSE): deja la conexión abierta; cada alta emite "event: cambio"
+GET {{host}}/api/eventos
 Authorization: Bearer {{login.response.body.$.token}}
 
 ### Documentos firmados: firma válida e integridad del contenido

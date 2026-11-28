@@ -462,7 +462,18 @@ app.MapGet("/api/datos/{tabla}", async (string tabla, HttpContext ctx) =>
         var ocultas = todas.Select(f => (string)f["name"]!).Except(visibles).ToList();
 
         var lista = string.Join(", ", visibles.Select(c => $"[{c}]"));
-        var filas = await ConsultaComoAsync(s.Principal, $"SELECT TOP 100 {lista} FROM {nombre};");
+        // Orden por clave primaria descendente: la fila recién insertada entra
+        // siempre en el TOP 100 aunque la tabla crezca.
+        var clave = await ConsultaAsync(
+            @"SELECT c.name AS columna
+                FROM sys.indexes i
+                JOIN sys.index_columns ic
+                  ON ic.object_id = i.object_id AND ic.index_id = i.index_id AND ic.key_ordinal = 1
+                JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+               WHERE i.object_id = OBJECT_ID(@tabla) AND i.is_primary_key = 1;",
+            ("@tabla", nombre));
+        var orden = clave.Count > 0 ? $" ORDER BY [{clave[0]["columna"]}] DESC" : "";
+        var filas = await ConsultaComoAsync(s.Principal, $"SELECT TOP 100 {lista} FROM {nombre}{orden};");
         // El alta se ofrece solo si el motor concede INSERT a este principal.
         var puede = await ConsultaComoAsync(s.Principal,
             $"SELECT HAS_PERMS_BY_NAME('{nombre}', 'OBJECT', 'INSERT') AS puede;");

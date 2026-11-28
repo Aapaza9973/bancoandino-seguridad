@@ -133,7 +133,7 @@ Claves de la aplicación: `ana/Cajero_Ana_2027#`, `luis/Super_Luis_2027#`, `mari
 dotnet test tests/BancoAndino.Tests/BancoAndino.Tests.csproj
 ```
 
-**24 pruebas** contra la app en memoria (`TestServer`, entorno `Testing`) y el SQL Server real. Cubren login PBKDF2, bloqueo tras cinco fallos, cookie `HttpOnly`, caducidad/revocación, salud autenticada, mínimos privilegios, `DENY` por columna (error 230), DDM enmascarado vs. real, descifrado permitido/denegado, TDE, firmas, XMLDSig con cadena de CA, inferencia, SQLi, auditoría con `succeeded = 0`, metadatos del auditor, **sesión que sobrevive a otro proceso**, **revocación global** y **Always Encrypted** (alta, búsqueda determinista, binario sin cliente y `403` al auditor).
+**26 pruebas** contra la app en memoria (`TestServer`, entorno `Testing`) y el SQL Server real. Cubren login PBKDF2, bloqueo tras cinco fallos, cookie `HttpOnly`, caducidad/revocación, salud autenticada, mínimos privilegios, `DENY` por columna (error 230), DDM enmascarado vs. real, descifrado permitido/denegado, TDE, firmas, XMLDSig con cadena de CA, inferencia, SQLi, auditoría con `succeeded = 0`, metadatos del auditor, **sesión que sobrevive a otro proceso**, **revocación global** y **Always Encrypted** (alta, búsqueda determinista, binario sin cliente y `403` al auditor).
 
 Las pruebas comparten la base: su constructor limpia `IntentosFallidos`/`BloqueadoHasta` y la paralelización está desactivada para que una revocación global no interfiera con otra prueba. Detener la app antes de compilar en Windows (el `.exe` queda bloqueado).
 
@@ -182,9 +182,9 @@ Como GitHub Actions no puede correr en esta cuenta, el mismo flujo está replica
 bash tools/verificar-ci-local.sh
 ```
 
-Levanta un contenedor limpio, aplica la secuencia completa y corre las 24 pruebas: `Correctas! 24/24`. Always Encrypted se omite en Linux (no hay almacén de certificados de Windows) y la prueba correspondiente verifica que el endpoint informa `disponible: false` en lugar de romper.
+Levanta un contenedor limpio, aplica la secuencia completa y corre las 26 pruebas: `Correctas! 26/26`. Always Encrypted se omite en Linux (no hay almacén de certificados de Windows) y la prueba correspondiente verifica que el endpoint informa `disponible: false` en lugar de romper.
 
-> Estado remoto: el job sigue sin ejecutarse porque la cuenta de GitHub está bloqueada por facturación (`github.com/settings/billing`). La lógica del workflow está validada en local (contenedor + 24/24), no en los servidores de GitHub.
+> Estado remoto: el job sigue sin ejecutarse porque la cuenta de GitHub está bloqueada por facturación (`github.com/settings/billing`). La lógica del workflow está validada en local (contenedor + 26/26), no en los servidores de GitHub.
 
 ## Mapa control → archivo
 
@@ -213,7 +213,8 @@ Levanta un contenedor limpio, aplica la secuencia completa y corre las 24 prueba
 ### Endpoints
 
 - `POST /api/login`, `POST /api/logout`, `GET /api/sesion` — sesión, cookie y permisos efectivos.
-- `GET /api/datos/{clientes|transacciones|empleados}` — lectura suplantando al usuario de base.
+- `GET /api/datos/{clientes|transacciones|empleados}` — lectura suplantando al usuario de base, ordenada por la clave primaria (más reciente primero) e informando `puede_insertar`.
+- `POST /api/clientes`, `POST /api/empleados` — altas suplantando al principal (el `INSERT` lo autoriza el motor); `GET /api/eventos` — SSE con los avisos de alta que refrescan las listas.
 - `GET /api/auditoria` — registros del audit (lector firmado); `GET /api/metadatos` — ACL, máscaras y columnas para `auditor` y `dba`.
 - `GET /api/admin/estado`, `POST /api/admin/{permiso|mascara|usuario|revocar-sesiones}` — solo `dba`.
 - `GET /api/demo/inferencia?clienteId=&umbral=` — conteo sobre el saldo real; `GET /api/demo/sqli?filtro=` — vulnerable vs. parametrizado (solo `dba`).
@@ -246,4 +247,4 @@ api.http                  peticiones manuales
 2. **El lector de auditoría firmado tiene `CONTROL SERVER`** (`CertAuditoriaLogin`). Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor: su uso se audita desde `AuditSpec_LectorFirmado` (`15_auditoria_objetos.sql`) y su firma debe revisarse al cambiarlo.
 3. **Always Encrypted depende del almacén de certificados de Windows.** Para Linux o nube hay que cambiar el proveedor a Azure Key Vault; las columnas, la CEK y la app no cambian. Además protege del motor y del backup, no del proceso que abre la CMK.
 4. **La CA de firma es local.** El camino criptográfico (certificado emitido por una CA, cadena validada con `CustomRootTrust`) es el de producción; el certificado lo emite `pki/crear-pki.ps1`, no una CA pública. La app informa `origen` y `emisor` para que no se confunda con uno emitido por una CA externa.
-5. **La corrida remota del CI depende de la facturación de GitHub.** Todas las corridas registradas están en `failure`: el job no llega a arrancar (sin runner asignado, sin pasos y sin log), así que el bloqueo es de la cuenta, no del workflow. La lógica está replicada y validada en local con `tools/verificar-ci-local.sh` (24/24 sobre un contenedor limpio).
+5. **La corrida remota del CI depende de la facturación de GitHub.** Todas las corridas registradas están en `failure`: el job no llega a arrancar (sin runner asignado, sin pasos y sin log), así que el bloqueo es de la cuenta, no del workflow. La lógica está replicada y validada en local con `tools/verificar-ci-local.sh` (26/26 sobre un contenedor limpio).
