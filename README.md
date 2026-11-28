@@ -96,7 +96,7 @@ dotnet run --project app
 La sesión usa la cookie **`ba_sesion`** (`HttpOnly`, `SameSite=Strict`, `Secure` en HTTPS) además del `Bearer` de la API:
 
 - el token se guarda **hasheado (SHA-256) en `dbo.SesionesApp`**, así que un reinicio del proceso o un segundo nodo no cierran la sesión;
-- caducidad deslizante de **30 minutos** y absoluta de **8 horas**, evaluadas por el motor en el `WHERE` de `usp_SesionValidar` (una sola escritura y sin barrido de tabla por request); las filas vencidas o revocadas se borran en el login (`usp_SesionCrear`);
+- caducidad deslizante de **30 minutos** y absoluta de **8 horas**, evaluadas por el motor en el `WHERE` de `usp_SesionValidar` (una sola escritura y sin barrido de tabla por request); las filas vencidas o revocadas se borran en el login (`usp_SesionCrear`) con un índice filtrado sobre `UltimoUso` (`WHERE Revocada = 0`), que convierte la limpieza en una búsqueda de rango y no en un recorrido de la tabla; la caducidad absoluta no lleva índice ni barrido propio porque una sesión vencida deja de renovarse y ese mismo barrido la alcanza dentro de los 30 minutos siguientes;
 - `POST /api/admin/revocar-sesiones` marca todas las sesiones como revocadas en la tabla (solo `dba`);
 - las mutaciones con `Origin` de otro host se rechazan con `403` (CSRF).
 

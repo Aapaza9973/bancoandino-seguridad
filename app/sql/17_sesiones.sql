@@ -11,6 +11,12 @@
 USE BancoAndino;
 GO
 
+-- Los indices filtrados exigen estas opciones al crearse y al usarse; ademas
+-- quedan grabadas en cada procedimiento, asi que se fijan antes de todos.
+SET ANSI_NULLS ON;
+SET QUOTED_IDENTIFIER ON;
+GO
+
 IF OBJECT_ID('dbo.SesionesApp') IS NULL
 CREATE TABLE dbo.SesionesApp (
     TokenHash      CHAR(64)      NOT NULL PRIMARY KEY,   -- SHA-256 en hexadecimal
@@ -22,6 +28,31 @@ CREATE TABLE dbo.SesionesApp (
     UltimoUso      DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
     Revocada       BIT           NOT NULL DEFAULT 0
 );
+GO
+
+-- Indice filtrado para el barrido del login: solo sesiones vivas y solo por la
+-- caducidad que hace falta barrer. El mismo barrido alcanza a las vencidas por
+-- caducidad absoluta, porque al vencer dejan de renovarse y caen en cuanto su
+-- UltimoUso supera la vida deslizante. Por eso la absoluta no lleva indice ni
+-- DELETE propios: medido, costaban 3 lecturas por login de barrido y 3 por
+-- INSERT de mantenimiento para adelantar como mucho media hora un borrado que
+-- no cambia ninguna decision del motor.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                WHERE object_id = OBJECT_ID('dbo.SesionesApp')
+                  AND name = 'IX_SesionesApp_Vigentes_Uso')
+CREATE NONCLUSTERED INDEX IX_SesionesApp_Vigentes_Uso
+    ON dbo.SesionesApp (UltimoUso)
+    WHERE Revocada = 0;
+GO
+
+-- Las revocadas quedan fuera de ese indice: se borran con el suyo, que
+-- normalmente esta vacio y solo crece cuando alguien revoca todas las sesiones.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes
+                WHERE object_id = OBJECT_ID('dbo.SesionesApp')
+                  AND name = 'IX_SesionesApp_Revocadas')
+CREATE NONCLUSTERED INDEX IX_SesionesApp_Revocadas
+    ON dbo.SesionesApp (Revocada)
+    WHERE Revocada = 1;
 GO
 
 CREATE OR ALTER PROCEDURE dbo.usp_SesionCrear
@@ -36,12 +67,16 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- Higiene en el login, no en cada request: cerradas, vencidas por
-    -- inactividad o por tiempo absoluto.
+    -- Higiene en el login, no en cada request. Dos borrados sargables en vez de
+    -- un OR, cada uno con su indice filtrado en lugar de recorrer la tabla. El
+    -- de UltimoUso borra tambien las vencidas por caducidad absoluta: la sesion
+    -- deja de renovarse al vencer, asi que su UltimoUso se congela y este
+    -- borrado la alcanza dentro de los siguientes @VidaMinutos.
+    DELETE FROM dbo.SesionesApp WHERE Revocada = 1;
+
     DELETE FROM dbo.SesionesApp
-     WHERE Revocada = 1
-        OR DATEADD(HOUR, @VidaAbsolutaHoras, Creada) < SYSUTCDATETIME()
-        OR DATEADD(MINUTE, @VidaMinutos, UltimoUso) < SYSUTCDATETIME();
+     WHERE Revocada = 0
+       AND UltimoUso < DATEADD(MINUTE, -@VidaMinutos, SYSUTCDATETIME());
 
     INSERT INTO dbo.SesionesApp (TokenHash, Usuario, NombreCompleto, Rol, PrincipalBD)
     VALUES (@TokenHash, @Usuario, @Nombre, @Rol, @Principal);
