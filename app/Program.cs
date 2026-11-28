@@ -12,6 +12,9 @@ using Microsoft.Data.SqlClient;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddUserSecrets<Program>(optional: true);
+// Las variables de entorno mandan sobre los secretos locales: es lo que usa
+// tools/verificar-ci-local.sh para apuntar las pruebas a su contenedor.
+builder.Configuration.AddEnvironmentVariables();
 
 // HTTP para el preview local y HTTPS con el certificado de desarrollo.
 if (!builder.Environment.IsEnvironment("Testing"))
