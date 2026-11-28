@@ -37,9 +37,8 @@ public class AltasTests : IClassFixture<Fabrica>
         var c = _fabrica.CreateClient();
         var r = await c.PostAsJsonAsync("/api/login", new { usuario, password = clave });
         r.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
-        c.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", doc.RootElement.GetProperty("token").GetString());
+        // La cookie HttpOnly es la única credencial; el cliente de pruebas la
+        // conserva entre peticiones, así que no hay token que copiar.
         return c;
     }
 

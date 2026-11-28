@@ -2,7 +2,7 @@
 
 Proyecto de **Seguridad Informática**: una aplicación ASP.NET Core (net9.0) contra **SQL Server 2022** donde los controles los aplica el motor, no el código. La consola no "simula" permisos: cada consulta viaja como el usuario de base que corresponde (`EXECUTE AS USER`), así que lo que se ve en pantalla es el veredicto real de SQL Server — lo que concede, lo que enmascara y lo que niega.
 
-Sobre una misma base `BancoAndino` demuestra: matriz de protección, mínimo privilegio, permisos por columna, enmascaramiento dinámico (DDM) e inferencia por `WHERE`, SQL injection comparada, auditoría a archivo con accesos denegados, cifrado en reposo (TDE), cifrado por columna, frase de paso, **Always Encrypted con la CMK fuera del motor**, firma digital de transacciones y **XMLDSig con cadena de CA**, contraseñas PBKDF2, TLS, sesión con cookie `HttpOnly` **persistida en la base**, revocación global y restauración verificada **en otra instancia**.
+Sobre una misma base `BancoAndino` demuestra: matriz de protección, mínimo privilegio, permisos por columna, enmascaramiento dinámico (DDM) e inferencia por `WHERE`, SQL injection comparada, auditoría a archivo con accesos denegados y escrituras de datos, cifrado en reposo (TDE), cifrado por columna, frase de paso, **Always Encrypted con la CMK fuera del motor**, firma digital de transacciones y **XMLDSig con cadena de CA**, contraseñas PBKDF2, TLS, sesión con cookie `HttpOnly` **persistida en la base**, revocación global y restauración verificada **en otra instancia**.
 
 ## Requisitos
 
@@ -38,7 +38,7 @@ Ejecutar como `sysadmin` (SSMS, o `sqlcmd -S localhost -E -i archivo.sql`), **en
 | `app/sql/12_restauracion_prueba.sql` | `RESTORE VERIFYONLY`, restauración a `BancoAndino_Restaurada`, `DBCC CHECKDB`, conteos y firmas. |
 | `app/sql/13_admin_procs.sql` | `usp_AdminPermiso` y `usp_AdminMascara` con `EXECUTE AS OWNER`: administrar sin dar `CONTROL` a la app. |
 | `app/sql/14_auditoria_lector.sql` | `usp_LeerAuditoria`, firmado por `CertAuditoria` (que tiene `CONTROL SERVER`); la app solo recibe `EXECUTE`. Deriva la ruta del audit, sirve en Windows y Linux. |
-| `app/sql/15_auditoria_objetos.sql` | Consolida la especificación de auditoría con tarjetas, firmas, usuarios y `EXECUTE` sobre `usp_DescifrarTarjeta`. |
+| `app/sql/15_auditoria_objetos.sql` | Consolida la especificación de auditoría: `SELECT` de las tablas sensibles, `INSERT`/`UPDATE`/`DELETE` de `Clientes`, `Empleados` y `Transacciones`, tarjetas, firmas, usuarios y `EXECUTE` sobre `usp_DescifrarTarjeta`. |
 | `app/sql/16_always_encrypted.sql` | `dbo.ClientesAE` con `CI` determinista y nombre/saldo/tarjeta aleatorios, más los permisos. Idempotente: si no hay CEK, avisa y no falla (así corre en el CI de Linux). |
 | `app/sql/17_sesiones.sql` | `dbo.SesionesApp` + `usp_SesionCrear/Validar/Cerrar/RevocarTodas`: la sesión deja de vivir en el proceso. |
 | `app/sql/18_metadatos.sql` | `VIEW DEFINITION` para `rol_auditor` y verificación en su contexto (cierre de B5). |
@@ -133,7 +133,7 @@ Claves de la aplicación: `ana/Cajero_Ana_2027#`, `luis/Super_Luis_2027#`, `mari
 dotnet test tests/BancoAndino.Tests/BancoAndino.Tests.csproj
 ```
 
-**26 pruebas** contra la app en memoria (`TestServer`, entorno `Testing`) y el SQL Server real. Cubren login PBKDF2, bloqueo tras cinco fallos, cookie `HttpOnly`, caducidad/revocación, salud autenticada, mínimos privilegios, `DENY` por columna (error 230), DDM enmascarado vs. real, descifrado permitido/denegado, TDE, firmas, XMLDSig con cadena de CA, inferencia, SQLi, auditoría con `succeeded = 0`, metadatos del auditor, **sesión que sobrevive a otro proceso**, **revocación global** y **Always Encrypted** (alta, búsqueda determinista, binario sin cliente y `403` al auditor).
+**27 pruebas** contra la app en memoria (`TestServer`, entorno `Testing`) y el SQL Server real. Cubren login PBKDF2, bloqueo tras cinco fallos, cookie `HttpOnly`, caducidad/revocación, salud autenticada, mínimos privilegios, `DENY` por columna (error 230), DDM enmascarado vs. real, descifrado permitido/denegado, TDE, firmas, XMLDSig con cadena de CA, inferencia, SQLi, auditoría con `succeeded = 0`, metadatos del auditor, **sesión que sobrevive a otro proceso**, **revocación global** y **Always Encrypted** (alta, búsqueda determinista, binario sin cliente y `403` al auditor).
 
 Las pruebas comparten la base: su constructor limpia `IntentosFallidos`/`BloqueadoHasta` y la paralelización está desactivada para que una revocación global no interfiera con otra prueba. Detener la app antes de compilar en Windows (el `.exe` queda bloqueado).
 
@@ -182,9 +182,9 @@ Como GitHub Actions no puede correr en esta cuenta, el mismo flujo está replica
 bash tools/verificar-ci-local.sh
 ```
 
-Levanta un contenedor limpio, aplica la secuencia completa y corre las 26 pruebas: `Correctas! 26/26`. Always Encrypted se omite en Linux (no hay almacén de certificados de Windows) y la prueba correspondiente verifica que el endpoint informa `disponible: false` en lugar de romper.
+Levanta un contenedor limpio, aplica la secuencia completa y corre las 27 pruebas: `Correctas! 27/27`. Always Encrypted se omite en Linux (no hay almacén de certificados de Windows) y la prueba correspondiente verifica que el endpoint informa `disponible: false` en lugar de romper.
 
-> Estado remoto: el job sigue sin ejecutarse porque la cuenta de GitHub está bloqueada por facturación (`github.com/settings/billing`). La lógica del workflow está validada en local (contenedor + 26/26), no en los servidores de GitHub.
+> Estado remoto: el job sigue sin ejecutarse porque la cuenta de GitHub está bloqueada por facturación (`github.com/settings/billing`). La lógica del workflow está validada en local (contenedor + 27/27), no en los servidores de GitHub.
 
 ## Mapa control → archivo
 
@@ -195,7 +195,7 @@ Levanta un contenedor limpio, aplica la secuencia completa y corre las 26 prueba
 | Permisos por columna | `01_esquema.sql` §4, `/api/datos/{tabla}` | Clientes / Empleados | `Cajero_lee_empleados_pero_no_la_columna_salario` |
 | Metadatos y ACL para el auditor (B5) | `18_metadatos.sql`, `/api/metadatos` | Metadatos y ACL | `El_auditor_lee_la_acl_y_las_mascaras_sin_poder_cambiarlas` |
 | SQLi comparada | `10_demo_sqli.sql`, `/api/demo/sqli` | SQL injection | `La_demo_de_sqli_muestra_la_diferencia` |
-| Auditoría y accesos denegados | `02_auditoria.sql`, `14_auditoria_lector.sql`, `15_auditoria_objetos.sql`, `/api/auditoria` | Auditoría | `La_auditoria_registra_accesos_denegados` |
+| Auditoría de accesos y escrituras | `02_auditoria.sql`, `14_auditoria_lector.sql`, `15_auditoria_objetos.sql`, `/api/auditoria` | Auditoría | `La_auditoria_registra_accesos_denegados`, `La_auditoria_cubre_las_escrituras_de_datos` |
 | Inferencia por `WHERE` | `/api/demo/inferencia`, `app.js` | Inferencia DDM | `Inferencia_por_umbral_revela_el_saldo_real` |
 | Enmascaramiento dinámico (DDM) | `01_esquema.sql` §2, `usp_AdminMascara` | Clientes / Empleados / Administración | `Cajero_lee_empleados_pero_no_la_columna_salario` |
 | Contraseñas PBKDF2 y rotación | `03_usuarios_app.sql`, `08_rotar_password_demo.sql`, `/api/login` | Acceso | `Login_con_clave_incorrecta_devuelve_401` |
@@ -247,4 +247,4 @@ api.http                  peticiones manuales
 2. **El lector de auditoría firmado tiene `CONTROL SERVER`** (`CertAuditoriaLogin`). Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor: su uso se audita desde `AuditSpec_LectorFirmado` (`15_auditoria_objetos.sql`) y su firma debe revisarse al cambiarlo.
 3. **Always Encrypted depende del almacén de certificados de Windows.** Para Linux o nube hay que cambiar el proveedor a Azure Key Vault; las columnas, la CEK y la app no cambian. Además protege del motor y del backup, no del proceso que abre la CMK.
 4. **La CA de firma es local.** El camino criptográfico (certificado emitido por una CA, cadena validada con `CustomRootTrust`) es el de producción; el certificado lo emite `pki/crear-pki.ps1`, no una CA pública. La app informa `origen` y `emisor` para que no se confunda con uno emitido por una CA externa.
-5. **La corrida remota del CI depende de la facturación de GitHub.** Todas las corridas registradas están en `failure`: el job no llega a arrancar (sin runner asignado, sin pasos y sin log), así que el bloqueo es de la cuenta, no del workflow. La lógica está replicada y validada en local con `tools/verificar-ci-local.sh` (26/26 sobre un contenedor limpio).
+5. **La corrida remota del CI depende de la facturación de GitHub.** Todas las corridas registradas están en `failure`: el job no llega a arrancar (sin runner asignado, sin pasos y sin log), así que el bloqueo es de la cuenta, no del workflow. La lógica está replicada y validada en local con `tools/verificar-ci-local.sh` (27/27 sobre un contenedor limpio).

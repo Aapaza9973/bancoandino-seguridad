@@ -51,7 +51,7 @@ La aplicación se conecta como **`app_bancoandino`**, sin roles fijos: `IMPERSON
 | Certificado XMLDSig efímero | **Cerrada (CA local)** | `pki/crear-pki.ps1` emite desde una CA raíz; la app valida con `X509Chain` + `CustomRootTrust` y cae a efímero solo si falta la CA | `valida=True`, `cadena_valida=True`, emisor `CN=BancoAndino Root CA` |
 | Restauración solo en la misma instancia | **Cerrada** | `tools/verificar-restauracion-otra-instancia.sh`: contenedor limpio con su propia SMK, certificado TDE viajando como `CERTENCODED`/`CERTPRIVATEKEY` | `ENCRYPTED · AES 256`, `DBCC CHECKDB`, conteos, firmas y `varbinary` en `ClientesAE` |
 | Auditor sin metadatos (B5) | **Cerrada** | `GRANT VIEW DEFINITION TO rol_auditor` y `/api/metadatos` en el contexto del auditor | `VIEW DEFINITION=True`, `CONTROL=False`, 8 máscaras, cajero 403 |
-| CI sin corridas | **Validado en local** | El workflow replica la secuencia completa con `app_bancoandino` y `AuditDir` de Linux | `tools/verificar-ci-local.sh`: contenedor limpio, **26/26** |
+| CI sin corridas | **Validado en local** | El workflow replica la secuencia completa con `app_bancoandino` y `AuditDir` de Linux | `tools/verificar-ci-local.sh`: contenedor limpio, **27/27** |
 
 También se cerraron B1–B6 (DBA sin `db_owner`, conexión sin `sysadmin`, controles en el motor, sin *fallback* de descifrado, metadatos para el auditor, `CHECK_POLICY = ON` con PBKDF2) y se corrigió un defecto encontrado en revisión: `usp_SesionRevocarTodas` contaba como revocadas las sesiones ya vencidas (con 11 filas y 2 vencidas informaba 11; ahora informa 9).
 
@@ -95,8 +95,8 @@ La tercera fila es la que decide: el `DELETE` por `Creada` **necesita** su índi
 
 | Comprobación | Resultado |
 | --- | --- |
-| `dotnet test` sobre SQL Server real | **26/26** |
-| `tools/verificar-ci-local.sh` en contenedor limpio | **26/26** |
+| `dotnet test` sobre SQL Server real | **27/27** |
+| `tools/verificar-ci-local.sh` en contenedor limpio | **27/27** |
 | Login real tras el último cambio | `ana` 200, `/api/sesion` 200, el barrido borró 2 filas vencidas |
 | Always Encrypted | CEK RSA-OAEP de 627 bytes, `varbinary(65)`, búsqueda por `CI` → 1 fila, `dba` 403 |
 | Metadatos del auditor | `VIEW DEFINITION=True`, `CONTROL=False`, 8 máscaras |

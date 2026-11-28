@@ -2,6 +2,8 @@
    Auditoria consolidada de datos - BancoAndino
    SQL Server permite una sola especificacion de base por
    audit, asi que se reemplaza la de 02 por la version completa.
+   Cubre lecturas y escrituras sobre las tablas de datos: un alta
+   de cliente o empleado tambien debe quedar en el registro.
    Ejecutar despues de 06_cifrado_columnas.sql.
    ========================================================= */
 USE BancoAndino;
@@ -19,6 +21,17 @@ FOR SERVER AUDIT Audit_BancoAndino
 ADD (SELECT ON dbo.Clientes             BY public),
 ADD (SELECT ON dbo.Empleados            BY public),
 ADD (SELECT ON dbo.Transacciones        BY public),
+-- Escrituras: un alta, una correccion o una baja tambien dejan rastro,
+-- con el principal que la ejecuto (cajero_ana o supervisor_luis).
+ADD (INSERT ON dbo.Clientes             BY public),
+ADD (UPDATE ON dbo.Clientes             BY public),
+ADD (DELETE ON dbo.Clientes             BY public),
+ADD (INSERT ON dbo.Empleados            BY public),
+ADD (UPDATE ON dbo.Empleados            BY public),
+ADD (DELETE ON dbo.Empleados            BY public),
+ADD (INSERT ON dbo.Transacciones        BY public),
+ADD (UPDATE ON dbo.Transacciones        BY public),
+ADD (DELETE ON dbo.Transacciones        BY public),
 ADD (SELECT ON dbo.TarjetasCifradas     BY public),
 ADD (SELECT ON dbo.TransaccionesFirmadas BY public),
 ADD (SELECT ON dbo.UsuariosApp          BY public),

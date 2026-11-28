@@ -40,9 +40,8 @@ public class ApiTests : IClassFixture<Fabrica>
         var c = fabrica.CreateClient();
         var r = await c.PostAsJsonAsync("/api/login", new { usuario, password = clave });
         r.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
-        c.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", doc.RootElement.GetProperty("token").GetString());
+        // La cookie HttpOnly es la única credencial; el cliente de pruebas la
+        // conserva entre peticiones, así que no hay token que copiar.
         return c;
     }
 
@@ -312,6 +311,30 @@ public class ApiTests : IClassFixture<Fabrica>
 
         var filas = (await JsonAsync(r)).GetProperty("filas");
         Assert.Contains(filas.EnumerateArray(), f => !f.GetProperty("succeeded").GetBoolean());
+    }
+
+    [Fact]
+    public async Task La_auditoria_cubre_las_escrituras_de_datos()
+    {
+        // La especificación debe incluir INSERT, UPDATE y DELETE en las tres
+        // tablas: sin eso, un alta de la consola no deja rastro.
+        var cadena = _fabrica.Services.GetRequiredService<IConfiguration>()
+            .GetConnectionString("BancoAndino")!;
+        await using var cn = new SqlConnection(cadena);
+        await cn.OpenAsync();
+        await using var cmd = new SqlCommand(
+            @"SELECT OBJECT_NAME(major_id) AS tabla, audit_action_name AS accion
+                FROM sys.database_audit_specification_details
+                WHERE audit_action_name IN ('INSERT', 'UPDATE', 'DELETE');", cn);
+        await using var rd = await cmd.ExecuteReaderAsync();
+
+        var acciones = new List<string>();
+        while (await rd.ReadAsync())
+            acciones.Add($"{rd.GetString(1)}:{rd.GetString(0)}");
+
+        foreach (var tabla in new[] { "Clientes", "Empleados", "Transacciones" })
+            foreach (var accion in new[] { "INSERT", "UPDATE", "DELETE" })
+                Assert.Contains($"{accion}:{tabla}", acciones);
     }
 
     [Fact]

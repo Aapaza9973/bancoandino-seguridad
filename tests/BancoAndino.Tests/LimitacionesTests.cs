@@ -51,9 +51,8 @@ public class LimitacionesTests : IClassFixture<Fabrica>
         var c = fabrica.CreateClient();
         var r = await c.PostAsJsonAsync("/api/login", new { usuario, password = clave });
         r.EnsureSuccessStatusCode();
-        using var doc = JsonDocument.Parse(await r.Content.ReadAsStringAsync());
-        c.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", doc.RootElement.GetProperty("token").GetString());
+        // La cookie HttpOnly es la única credencial; el cliente de pruebas la
+        // conserva entre peticiones, así que no hay token que copiar.
         return c;
     }
 
@@ -73,13 +72,15 @@ public class LimitacionesTests : IClassFixture<Fabrica>
             var login = await c.PostAsJsonAsync("/api/login",
                 new { usuario = "ana", password = "Cajero_Ana_2027#" });
             Assert.Equal(HttpStatusCode.OK, login.StatusCode);
-            token = (await JsonAsync(login)).GetProperty("token").GetString()!;
+            // El token solo viaja en la cookie HttpOnly: se lee de Set-Cookie.
+            token = login.Headers.GetValues("Set-Cookie").First()
+                .Split(';')[0]["ba_sesion=".Length..];
         }
 
-        // Segundo proceso, mismo token: la sesión vive en dbo.SesionesApp.
+        // Segundo proceso, misma cookie: la sesión vive en dbo.SesionesApp.
         using var segundo = new Fabrica();
         var otro = segundo.CreateClient();
-        otro.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        otro.DefaultRequestHeaders.Add("Cookie", $"ba_sesion={token}");
         var sesion = await otro.GetAsync("/api/sesion");
 
         Assert.Equal(HttpStatusCode.OK, sesion.StatusCode);

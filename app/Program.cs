@@ -393,7 +393,7 @@ app.MapPost("/api/login", async (LoginDto dto, HttpContext ctx) =>
 
     return Results.Ok(new
     {
-        token, usuario = sesion.Usuario, nombre = sesion.Nombre,
+        usuario = sesion.Usuario, nombre = sesion.Nombre,
         rol = sesion.Rol, principal = sesion.Principal,
         expira_minutos = (int)vidaSesion.TotalMinutes
     });

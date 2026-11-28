@@ -1,6 +1,7 @@
 # Peticiones de prueba - BancoAndino
 # Extensión REST Client de VS Code: abre este archivo y pulsa "Send Request"
-# sobre cada bloque. El token del login queda guardado en {{login.response.body.$.token}}.
+# sobre cada bloque. La sesión viaja en la cookie HttpOnly (ba_sesion): el cliente
+# HTTP la guarda y la reenvía solo en las peticiones siguientes del mismo host.
 
 @host = http://127.0.0.1:5080
 
@@ -46,24 +47,19 @@ Content-Type: application/json
 
 ### Salud del servicio: requiere token (sin Authorization devuelve 401)
 GET {{host}}/api/salud
-Authorization: Bearer {{login.response.body.$.token}}
 
 ### Sesión actual: usuario, rol, permisos y UNMASK
 GET {{host}}/api/sesion
-Authorization: Bearer {{login.response.body.$.token}}
 
 ### Clientes: lectura + puede_insertar (ordena por la clave primaria, más reciente primero)
 GET {{host}}/api/datos/clientes
-Authorization: Bearer {{login.response.body.$.token}}
 
 ### Empleados: lectura como supervisor, sin la columna Salario
 GET {{host}}/api/datos/empleados
-Authorization: Bearer {{loginSupervisor.response.body.$.token}}
 
 ### Alta de cliente como cajero -> 201, fila persistida y aviso SSE
 POST {{host}}/api/clientes
 Content-Type: application/json
-Authorization: Bearer {{login.response.body.$.token}}
 
 {
   "nombre": "Cliente de prueba",
@@ -77,7 +73,6 @@ Authorization: Bearer {{login.response.body.$.token}}
 ### Alta de empleado como supervisor -> 201, fila persistida y aviso SSE
 POST {{host}}/api/empleados
 Content-Type: application/json
-Authorization: Bearer {{loginSupervisor.response.body.$.token}}
 
 {
   "nombre": "Empleado de prueba",
@@ -89,20 +84,16 @@ Authorization: Bearer {{loginSupervisor.response.body.$.token}}
 
 ### Avisos en vivo (SSE): deja la conexión abierta; cada alta emite "event: cambio"
 GET {{host}}/api/eventos
-Authorization: Bearer {{login.response.body.$.token}}
 
 ### Documentos firmados: firma válida e integridad del contenido
 GET {{host}}/api/firma
-Authorization: Bearer {{login.response.body.$.token}}
 
 ### Tarjetas cifradas por columna (solo binario y últimos 4)
 GET {{host}}/api/columnas
-Authorization: Bearer {{login.response.body.$.token}}
 
 ### Intentar descifrar como cajero -> 403, el motor niega abrir la clave
 POST {{host}}/api/columnas/descifrar
 Content-Type: application/json
-Authorization: Bearer {{login.response.body.$.token}}
 
 {
   "tarjetaId": 1
@@ -111,7 +102,6 @@ Authorization: Bearer {{login.response.body.$.token}}
 ### Descifrar como riesgos -> número y CVV reales
 POST {{host}}/api/columnas/descifrar
 Content-Type: application/json
-Authorization: Bearer {{loginRiesgos.response.body.$.token}}
 
 {
   "tarjetaId": 1
@@ -119,12 +109,9 @@ Authorization: Bearer {{loginRiesgos.response.body.$.token}}
 
 ### Estado de TDE y cifrado en reposo
 GET {{host}}/api/cifrado
-Authorization: Bearer {{loginDba.response.body.$.token}}
 
 ### Registro de auditoría
 GET {{host}}/api/auditoria
-Authorization: Bearer {{loginDba.response.body.$.token}}
 
 ### Panel de administración (permisos y máscaras)
 GET {{host}}/api/admin/estado
-Authorization: Bearer {{loginDba.response.body.$.token}}
