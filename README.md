@@ -152,7 +152,7 @@ Las pruebas comparten la base: su constructor limpia `IntentosFallidos`/`Bloquea
 
 | Script | Qué compara | Qué deja en el log |
 | --- | --- | --- |
-| `medir-sesiones.sh` | Tres estados de índices: los dos de vigentes, solo `Uso` y ninguno | Lecturas lógicas y µs por llamada de `usp_SesionValidar` (1.000 llamadas) y del login (50 altas), sin y con 2.000 filas muertas |
+| `medir-sesiones.sh` | El diseño final (`IX_SesionesApp_Vigentes_Uso`) contra la línea base sin índices de vigentes | Lecturas lógicas y µs por llamada de `usp_SesionValidar` (1.000 llamadas) y del login (50 altas), sin y con 2.000 filas muertas |
 | `medir-final.sh` | El diseño final: reaplica `17_sesiones.sql`, quita el índice de `Creada` y prueba la caducidad absoluta | Coste del `UPDATE … OUTPUT` y del barrido, más la salida de `10_final.sql`: validar una vencida devuelve 0, contar vigentes y el login que borra 1.000 filas |
 | `medir-plan.sh` | El plan con y sin índices filtrados | Marcas del plan (`Index Seek`, `Clustered Index Update`, índices usados) y tamaño del XML |
 
