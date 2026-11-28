@@ -111,7 +111,7 @@ Las mediciones de rendimiento se reproducen con los scripts de `tools/mediciones
 2. **El lector de auditoría firmado tiene `CONTROL SERVER`.** Es la única forma de que `fn_get_audit_file` funcione sin dárselo a la app, pero el procedimiento es un objeto de alto valor: su uso se audita desde `AuditSpec_LectorFirmado` (`15`) y su firma debe revisarse al cambiarlo.
 3. **Always Encrypted depende del almacén de certificados de Windows.** En Linux/CI no está (`MSSQL_CERTIFICATE_STORE`); el script avisa y la prueba verifica `disponible: false` en lugar de romper.
 4. **La CA de firma es local.** El camino criptográfico es el de producción, pero el certificado lo emite `pki/crear-pki.ps1`, no una CA pública.
-5. **La corrida remota del CI depende de la facturación de GitHub.** La cuenta está bloqueada: las 15 corridas registradas fallan sin arrancar (sin runner, sin pasos y sin log). El flujo está replicado y validado en local.
+5. **La corrida remota del CI depende de la facturación de GitHub.** La cuenta está bloqueada: todas las corridas registradas fallan sin arrancar (sin runner, sin pasos y sin log). El flujo está replicado y validado en local.
 
 ## 8. Cómo reproducir
 
