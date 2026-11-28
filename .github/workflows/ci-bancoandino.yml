@@ -14,7 +14,10 @@ jobs:
     env:
       SA_PASSWORD: 'BancoAndino_Ci2026!'
       SQLCMD: '/opt/mssql-tools18/bin/sqlcmd'
-      ConnectionStrings__BancoAndino: 'Server=127.0.0.1,1433;Database=BancoAndino;User Id=sa;Password=BancoAndino_Ci2026!;TrustServerCertificate=True;Encrypt=False;Application Name=BancoAndinoCi'
+      AUDIT_DIR: '/var/opt/mssql/audit/'
+      # La app ya no se conecta como sa: las pruebas de mínimo privilegio
+      # comprueban que app_bancoandino no es sysadmin ni db_owner.
+      ConnectionStrings__BancoAndino: 'Server=127.0.0.1,1433;Database=BancoAndino;User Id=app_bancoandino;Password=Apl1cacion.Andino#27;TrustServerCertificate=True;Encrypt=False;Application Name=BancoAndinoCi'
 
     steps:
       - name: Descargar el repositorio
@@ -47,17 +50,31 @@ jobs:
           docker logs sql | tail -40
           exit 1
 
+      - name: Preparar la carpeta de auditoría
+        run: |
+          docker exec -u root sql mkdir -p "$AUDIT_DIR"
+          docker exec -u root sql chown mssql:mssql "$AUDIT_DIR"
+
       - name: Crear la base con el modelo de seguridad
         run: |
-          for archivo in 01_esquema.sql 03_usuarios_app.sql 05_firma_transacciones.sql 06_cifrado_columnas.sql; do
+          for archivo in 01_esquema.sql 03_usuarios_app.sql 05_firma_transacciones.sql 06_cifrado_columnas.sql 10_demo_sqli.sql 13_admin_procs.sql 17_sesiones.sql 18_metadatos.sql; do
             echo "== $archivo"
             docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < "app/sql/$archivo"
           done
 
-      - name: Activar TDE y sembrar un documento firmado
+      - name: Activar la auditoría
+        run: |
+          docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b -v AuditDir="$AUDIT_DIR" < app/sql/02_auditoria.sql
+
+      - name: Activar TDE, sembrar datos, lector de auditoría y auditoría consolidada
         run: |
           docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/ci/40_tde_ci.sql
           docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/ci/50_seed_ci.sql
+          docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/14_auditoria_lector.sql
+          docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/15_auditoria_objetos.sql
+          # Always Encrypted necesita el almacen de certificados de Windows:
+          # en Linux el script avisa y omite la tabla, y las pruebas lo verifican.
+          docker exec -i sql "$SQLCMD" -S localhost -U sa -P "$SA_PASSWORD" -C -b < app/sql/16_always_encrypted.sql
 
       - name: Compilar y ejecutar las pruebas
         run: dotnet test tests/BancoAndino.Tests/BancoAndino.Tests.csproj --nologo --verbosity normal
