@@ -136,6 +136,40 @@ dotnet test tests/BancoAndino.Tests/BancoAndino.Tests.csproj
 
 Las pruebas comparten la base: su constructor limpia `IntentosFallidos`/`BloqueadoHasta` y la paralelización está desactivada para que una revocación global no interfiera con otra prueba. Detener la app antes de compilar en Windows (el `.exe` queda bloqueado).
 
+## Mediciones de rendimiento de la sesión
+
+`tools/mediciones/` reproduce las cifras de `DESARROLLO.md` §4 sobre el camino caliente de `dbo.SesionesApp`: la validación de sesión y el barrido de vencidas en el login.
+
+> **No ejecutar contra una base con datos reales.** Los scripts vacían `dbo.SesionesApp`, cargan 20.000 sesiones sintéticas y crean o eliminan índices filtrados. Son para la base de laboratorio.
+
+### Requisitos
+
+- `sqlcmd` en el `PATH` y conexión por autenticación de Windows a `localhost` (los scripts no llevan credenciales).
+- La base `BancoAndino` creada hasta `app/sql/17_sesiones.sql`, con los procedimientos `usp_Sesion*` y sus índices.
+- Bash (Git Bash en Windows): los `.sh` usan `MSYS2_ARG_CONV_EXCL='*'` para que `-S`, `-I` y `-W` no se conviertan en rutas.
+
+### Qué mide cada script
+
+| Script | Qué compara | Qué deja en el log |
+| --- | --- | --- |
+| `medir-sesiones.sh` | Tres estados de índices: los dos de vigentes, solo `Uso` y ninguno | Lecturas lógicas y µs por llamada de `usp_SesionValidar` (1.000 llamadas) y del login (50 altas), sin y con 2.000 filas muertas |
+| `medir-final.sh` | El diseño final: reaplica `17_sesiones.sql`, quita el índice de `Creada` y prueba la caducidad absoluta | Coste del `UPDATE … OUTPUT` y del barrido, más la salida de `10_final.sql`: validar una vencida devuelve 0, contar vigentes y el login que borra 1.000 filas |
+| `medir-plan.sh` | El plan con y sin índices filtrados | Marcas del plan (`Index Seek`, `Clustered Index Update`, índices usados) y tamaño del XML |
+
+Cada script escribe su log en `tools/mediciones/medicion*.log` (ignorado por git) y resume por pantalla solo las líneas de interés.
+
+```bash
+bash tools/mediciones/medir-final.sh     # estado final del repositorio
+bash tools/mediciones/medir-sesiones.sh  # comparación de los tres estados
+bash tools/mediciones/medir-plan.sh      # planes de ejecución
+```
+
+### Qué tocan en la base y cómo volver atrás
+
+- `00_preparar.sql` copia las sesiones reales a `dbo.SesionesApp_med_respaldo` (solo si esa tabla no existe), vacía `SesionesApp` e inserta 20.000 filas sintéticas; `03_muertas.sql` envejece 2.000 de ellas para forzar el barrido.
+- `05_restaurar.sql` devuelve las sesiones originales, borra el respaldo y actualiza estadísticas; los tres scripts lo ejecutan al final.
+- Si una corrida se interrumpe, el respaldo sigue en la tabla y la base queda con sesiones sintéticas: `sqlcmd -S localhost -d BancoAndino -i tools/mediciones/05_restaurar.sql` la deja como estaba. Mientras tanto, las sesiones abiertas se pierden y hay que volver a entrar.
+
 ## Integración continua
 
 `.github/workflows/ci-bancoandino.yml` levanta SQL Server 2022 en un contenedor Linux, crea la carpeta de auditoría, aplica `01`, `03`, `05`, `06`, `10`, `13`, `17`, `18`, `02` (con `AuditDir` de Linux), `40_tde_ci`, `50_seed_ci`, `14`, `15` y `16`, y corre las pruebas con el login **`app_bancoandino`** (no `sa`).
