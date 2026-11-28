@@ -2,7 +2,7 @@
 
 Documento de cierre del proyecto de **Seguridad Informática**: una consola ASP.NET Core 9 contra **SQL Server 2022** donde los controles los aplica el motor, no el código. Cada consulta viaja como el usuario de base que corresponde (`EXECUTE AS USER`), así que lo que se ve en pantalla es el veredicto real de SQL Server: lo que concede, lo que enmascara y lo que niega.
 
-Repositorio: `github.com/Aapaza9973/bancoandino-seguridad` · rama `main` en `6d29444`, sincronizada con `origin/main`, árbol limpio.
+Repositorio: `github.com/Aapaza9973/bancoandino-seguridad` · rama `main`, nueve commits por encima del punto de partida, sincronizada con `origin/main`.
 
 ## 1. Punto de partida y objetivo
 
@@ -11,7 +11,7 @@ El proyecto arrancaba con la matriz de protección documentada y una aplicación
 1. **Cerrar las brechas declaradas** (B1–B6 de la matriz) y las seis limitaciones que el README admitía como deuda.
 2. **Dejar el resultado en el repositorio**, en commits lógicos que compilen por separado.
 
-Seis commits, cada uno compilado en un `git worktree` temporal antes de existir:
+Seis commits de código, cada uno compilado en un `git worktree` temporal antes de existir:
 
 | Commit | Qué cierra |
 | --- | --- |
@@ -137,7 +137,7 @@ bash tools/verificar-restauracion-otra-instancia.sh
 
 ## 9. Estado del repositorio
 
-- `main` en `6d29444`, **seis commits** por encima del punto de partida, publicados (`4d167a7..6d29444`).
-- Árbol de trabajo limpio; `origin/main` apunta al mismo commit.
+- `main` con **nueve commits** por encima del punto de partida (`4d167a7`), todos publicados en `origin/main`: seis de código, dos que agregan este documento y el que lo da de alta en el README.
+- Árbol de trabajo limpio y sincronizado con `origin/main`.
 - La aplicación corre en `http://127.0.0.1:5080` con el preview abierto.
-- Documentación viva en el repo: `README.md` (puesta en marcha, mapa control → archivo, endpoints), `MATRIZ-DE-PROTECCION.md` (§16 cierre de brechas) y `COMPARACION-CIFRADO.md`.
+- Documentación viva en el repo: `README.md` (puesta en marcha, mapa control → archivo, endpoints), este `DESARROLLO.md` (cierre, mediciones y decisiones), `MATRIZ-DE-PROTECCION.md` (§16 cierre de brechas) y `COMPARACION-CIFRADO.md`.

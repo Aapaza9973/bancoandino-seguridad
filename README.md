@@ -188,6 +188,7 @@ Levanta un contenedor limpio, aplica la secuencia completa y corre las 24 prueba
 ## Estructura
 
 ```
+DESARROLLO.md             Cierre del desarrollo: limitaciones, mediciones y decisiones
 MATRIZ-DE-PROTECCION.md   Fase 1: sujetos × objetos, ACL y capacidades
 COMPARACION-CIFRADO.md    TDE vs. columna vs. frase de paso vs. Always Encrypted
 app/                      API mínima + frontend estático
