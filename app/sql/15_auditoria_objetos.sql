@@ -21,8 +21,7 @@ FOR SERVER AUDIT Audit_BancoAndino
 ADD (SELECT ON dbo.Clientes             BY public),
 ADD (SELECT ON dbo.Empleados            BY public),
 ADD (SELECT ON dbo.Transacciones        BY public),
--- Escrituras: un alta, una correccion o una baja tambien dejan rastro,
--- con el principal que la ejecuto (cajero_ana o supervisor_luis).
+-- Escrituras: alta, correccion o baja, con el principal que la ejecuto.
 ADD (INSERT ON dbo.Clientes             BY public),
 ADD (UPDATE ON dbo.Clientes             BY public),
 ADD (DELETE ON dbo.Clientes             BY public),

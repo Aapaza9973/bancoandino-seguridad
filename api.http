@@ -1,12 +1,12 @@
 # Peticiones de prueba - BancoAndino
-# Extensión REST Client de VS Code: abre este archivo y pulsa "Send Request"
-# sobre cada bloque. La sesión viaja en la cookie HttpOnly (ba_sesion): el cliente
-# HTTP la guarda y la reenvía solo en las peticiones siguientes del mismo host.
+# Extensión REST Client de VS Code: pulsa "Send Request" sobre cada bloque.
+# La sesión viaja en la cookie HttpOnly (ba_sesion) y el cliente guarda una sola
+# por host: cada petición corre como el último login enviado, así que mandá el
+# login del rol que indica el título antes de la petición.
 
 @host = http://127.0.0.1:5080
 
-### Login como cajero (sin permisos sobre la clave de cifrado)
-# @name login
+### Login como cajero (ana)
 POST {{host}}/api/login
 Content-Type: application/json
 
@@ -15,8 +15,7 @@ Content-Type: application/json
   "password": "Cajero_Ana_2027#"
 }
 
-### Login como riesgos (puede descifrar tarjetas)
-# @name loginRiesgos
+### Login como riesgos (maria)
 POST {{host}}/api/login
 Content-Type: application/json
 
@@ -25,8 +24,7 @@ Content-Type: application/json
   "password": "Riesgos_Maria_2027#"
 }
 
-### Login como dba
-# @name loginDba
+### Login como dba (admin)
 POST {{host}}/api/login
 Content-Type: application/json
 
@@ -35,8 +33,7 @@ Content-Type: application/json
   "password": "Dba_Admin_2027#"
 }
 
-### Login como supervisor (da de alta empleados)
-# @name loginSupervisor
+### Login como supervisor (luis)
 POST {{host}}/api/login
 Content-Type: application/json
 
@@ -45,19 +42,19 @@ Content-Type: application/json
   "password": "Super_Luis_2027#"
 }
 
-### Salud del servicio: requiere token (sin Authorization devuelve 401)
+### Salud del servicio (cualquier sesión; sin cookie devuelve 401)
 GET {{host}}/api/salud
 
-### Sesión actual: usuario, rol, permisos y UNMASK
+### Sesión actual (cajero): usuario, rol, permisos y UNMASK
 GET {{host}}/api/sesion
 
-### Clientes: lectura + puede_insertar (ordena por la clave primaria, más reciente primero)
+### Clientes (cajero): lectura + puede_insertar, más reciente primero
 GET {{host}}/api/datos/clientes
 
-### Empleados: lectura como supervisor, sin la columna Salario
+### Empleados (supervisor): lectura sin la columna Salario
 GET {{host}}/api/datos/empleados
 
-### Alta de cliente como cajero -> 201, fila persistida y aviso SSE
+### Alta de cliente (cajero) -> 201, fila persistida y aviso SSE
 POST {{host}}/api/clientes
 Content-Type: application/json
 
@@ -70,7 +67,7 @@ Content-Type: application/json
   "saldo": 1500.00
 }
 
-### Alta de empleado como supervisor -> 201, fila persistida y aviso SSE
+### Alta de empleado (supervisor) -> 201, fila persistida y aviso SSE
 POST {{host}}/api/empleados
 Content-Type: application/json
 
@@ -82,16 +79,16 @@ Content-Type: application/json
   "email": "empleado.prueba@bancoandino.bo"
 }
 
-### Avisos en vivo (SSE): deja la conexión abierta; cada alta emite "event: cambio"
+### Avisos en vivo (cajero): deja la conexión abierta; cada alta emite "event: cambio"
 GET {{host}}/api/eventos
 
-### Documentos firmados: firma válida e integridad del contenido
+### Documentos firmados (cualquier sesión): firma válida e integridad del contenido
 GET {{host}}/api/firma
 
-### Tarjetas cifradas por columna (solo binario y últimos 4)
+### Tarjetas cifradas por columna (cajero): solo binario y últimos 4
 GET {{host}}/api/columnas
 
-### Intentar descifrar como cajero -> 403, el motor niega abrir la clave
+### Intentar descifrar (cajero) -> 403, el motor niega abrir la clave
 POST {{host}}/api/columnas/descifrar
 Content-Type: application/json
 
@@ -99,7 +96,7 @@ Content-Type: application/json
   "tarjetaId": 1
 }
 
-### Descifrar como riesgos -> número y CVV reales
+### Descifrar (riesgos) -> número y CVV reales
 POST {{host}}/api/columnas/descifrar
 Content-Type: application/json
 
@@ -107,11 +104,11 @@ Content-Type: application/json
   "tarjetaId": 1
 }
 
-### Estado de TDE y cifrado en reposo
+### Estado de TDE y cifrado en reposo (dba)
 GET {{host}}/api/cifrado
 
-### Registro de auditoría
+### Registro de auditoría (dba): lecturas, escrituras y accesos denegados
 GET {{host}}/api/auditoria
 
-### Panel de administración (permisos y máscaras)
+### Panel de administración (dba): permisos y máscaras
 GET {{host}}/api/admin/estado

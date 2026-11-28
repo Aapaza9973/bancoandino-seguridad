@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
@@ -51,8 +50,7 @@ public class LimitacionesTests : IClassFixture<Fabrica>
         var c = fabrica.CreateClient();
         var r = await c.PostAsJsonAsync("/api/login", new { usuario, password = clave });
         r.EnsureSuccessStatusCode();
-        // La cookie HttpOnly es la única credencial; el cliente de pruebas la
-        // conserva entre peticiones, así que no hay token que copiar.
+        // La sesión va en la cookie HttpOnly: el cliente la conserva sola.
         return c;
     }
 

@@ -1,5 +1,4 @@
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
@@ -26,9 +25,7 @@ public class ApiTests : IClassFixture<Fabrica>
     {
         _fabrica = fabrica;
         // Las pruebas comparten base: se parte sin bloqueos de una corrida anterior.
-        var cadena = fabrica.Services.GetRequiredService<IConfiguration>()
-            .GetConnectionString("BancoAndino")!;
-        using var cn = new SqlConnection(cadena);
+        using var cn = new SqlConnection(Cadena());
         cn.Open();
         using var cmd = new SqlCommand(
             "UPDATE dbo.UsuariosApp SET IntentosFallidos = 0, BloqueadoHasta = NULL;", cn);
@@ -40,8 +37,7 @@ public class ApiTests : IClassFixture<Fabrica>
         var c = fabrica.CreateClient();
         var r = await c.PostAsJsonAsync("/api/login", new { usuario, password = clave });
         r.EnsureSuccessStatusCode();
-        // La cookie HttpOnly es la única credencial; el cliente de pruebas la
-        // conserva entre peticiones, así que no hay token que copiar.
+        // La sesión va en la cookie HttpOnly: el cliente la conserva sola.
         return c;
     }
 
@@ -145,11 +141,13 @@ public class ApiTests : IClassFixture<Fabrica>
 
     // ---------- control de fuerza bruta y caducidad de sesión ----------
 
+    private string Cadena()
+        => _fabrica.Services.GetRequiredService<IConfiguration>()
+            .GetConnectionString("BancoAndino")!;
+
     private async Task EjecutarSqlAsync(string sql)
     {
-        var cadena = _fabrica.Services.GetRequiredService<IConfiguration>()
-            .GetConnectionString("BancoAndino")!;
-        await using var cn = new SqlConnection(cadena);
+        await using var cn = new SqlConnection(Cadena());
         await cn.OpenAsync();
         await using var cmd = new SqlCommand(sql, cn);
         await cmd.ExecuteNonQueryAsync();
@@ -159,9 +157,7 @@ public class ApiTests : IClassFixture<Fabrica>
     /// comprobar que una columna denegada produce el error 230.
     private async Task<SqlException> EjecutarComoAsync(string principal, string sql)
     {
-        var cadena = _fabrica.Services.GetRequiredService<IConfiguration>()
-            .GetConnectionString("BancoAndino")!;
-        await using var cn = new SqlConnection(cadena);
+        await using var cn = new SqlConnection(Cadena());
         await cn.OpenAsync();
         await using var cmd = new SqlCommand($"EXECUTE AS USER = @u;\n{sql}\nREVERT;", cn);
         cmd.Parameters.AddWithValue("@u", principal);
@@ -318,9 +314,7 @@ public class ApiTests : IClassFixture<Fabrica>
     {
         // La especificación debe incluir INSERT, UPDATE y DELETE en las tres
         // tablas: sin eso, un alta de la consola no deja rastro.
-        var cadena = _fabrica.Services.GetRequiredService<IConfiguration>()
-            .GetConnectionString("BancoAndino")!;
-        await using var cn = new SqlConnection(cadena);
+        await using var cn = new SqlConnection(Cadena());
         await cn.OpenAsync();
         await using var cmd = new SqlCommand(
             @"SELECT OBJECT_NAME(major_id) AS tabla, audit_action_name AS accion
@@ -340,9 +334,7 @@ public class ApiTests : IClassFixture<Fabrica>
     [Fact]
     public async Task La_cuenta_de_aplicacion_no_es_sysadmin_ni_db_owner()
     {
-        var cadena = _fabrica.Services.GetRequiredService<IConfiguration>()
-            .GetConnectionString("BancoAndino")!;
-        await using var cn = new SqlConnection(cadena);
+        await using var cn = new SqlConnection(Cadena());
         await cn.OpenAsync();
         await using var cmd = new SqlCommand(
             "SELECT IS_SRVROLEMEMBER('sysadmin') AS sa, IS_ROLEMEMBER('db_owner') AS owner;", cn);
@@ -366,6 +358,8 @@ public class ApiTests : IClassFixture<Fabrica>
         var c = _fabrica.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = true });
         var login = await c.PostAsJsonAsync("/api/login", new { usuario = "ana", password = "Cajero_Ana_2027#" });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        // El token no se repite en el cuerpo: la cookie es la única credencial.
+        Assert.False((await JsonAsync(login)).TryGetProperty("token", out _));
 
         var setCookie = login.Headers.GetValues("Set-Cookie").First();
         Assert.Contains("ba_sesion=", setCookie);
