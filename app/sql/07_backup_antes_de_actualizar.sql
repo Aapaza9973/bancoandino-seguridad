@@ -7,7 +7,8 @@ BACKUP CERTIFICATE CertBancoAndino TO FILE = 'C:/BackupBancoAndino/20261127_1453
     WITH PRIVATE KEY (FILE = 'C:/BackupBancoAndino/20261127_145344/CertBancoAndino.pvk', ENCRYPTION BY PASSWORD = 'BackupCert_BancoAndino2026!');
 GO
 BACKUP DATABASE BancoAndino TO DISK = 'C:/BackupBancoAndino/20261127_145344/BancoAndino_antes_developer.bak'
-    WITH INIT, COMPRESSION, CHECKSUM;
+    WITH INIT, COMPRESSION, CHECKSUM,
+         ENCRYPTION (ALGORITHM = AES_256, SERVER CERTIFICATE = CertBancoAndino);
 GO
 RESTORE VERIFYONLY FROM DISK = 'C:/BackupBancoAndino/20261127_145344/BancoAndino_antes_developer.bak' WITH CHECKSUM;
 GO

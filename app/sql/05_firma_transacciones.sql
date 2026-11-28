@@ -149,6 +149,15 @@ GO
 -- 7. Permisos de lectura para los roles de la app
 GRANT SELECT ON dbo.TransaccionesFirmadas TO rol_cajero, rol_supervisor, rol_riesgos, rol_auditor;
 GRANT SELECT ON dbo.vw_EstadoFirmas       TO rol_cajero, rol_supervisor, rol_riesgos, rol_auditor;
+
+-- Proceso de la aplicacion: firma y muestra el estado, no administra.
+GRANT SELECT ON dbo.TransaccionesFirmadas TO app_bancoandino;
+GRANT SELECT ON dbo.vw_EstadoFirmas       TO app_bancoandino;
+GRANT EXECUTE ON dbo.usp_FirmarTransaccion TO app_bancoandino;
+
+-- Alterar/restaurar son operaciones de demostracion: solo el DBA.
+GRANT EXECUTE ON dbo.usp_AlterarTransaccion   TO dba_admin;
+GRANT EXECUTE ON dbo.usp_RestaurarTransaccion TO dba_admin;
 GO
 
 SELECT name, subject, expiry_date FROM sys.certificates WHERE name = 'CertTransacciones';

@@ -1,8 +1,10 @@
 /* =========================================================
    Usuarios de la aplicacion - BancoAndino
-   La contrasena no se guarda en claro: se guarda HASHBYTES
-   de (sal + contrasena). La autorizacion NO vive aqui:
-   vive en los permisos y mascaras de SQL Server.
+   La contrasena no se guarda en claro: se guarda PBKDF2-HMAC-
+   SHA256 (210.000 iteraciones) con una sal aleatoria por usuario.
+   La verificacion se hace en la aplicacion; SQL Server solo
+   guarda sal, hash e iteraciones. La autorizacion sigue viviendo
+   en los permisos y mascaras del motor.
    ========================================================= */
 USE BancoAndino;
 GO
@@ -15,8 +17,9 @@ CREATE TABLE dbo.UsuariosApp (
     NombreCompleto  NVARCHAR(100) NOT NULL,
     PrincipalBD     VARCHAR(30)  NOT NULL,   -- usuario de la base que se suplanta
     Rol             VARCHAR(20)  NOT NULL,   -- cajero | supervisor | riesgos | auditor | dba
-    Sal                 VARCHAR(24)  NOT NULL,
-    Hash            VARBINARY(32) NOT NULL,
+    Sal             VARBINARY(16) NOT NULL,  -- sal aleatoria por usuario
+    Hash            VARBINARY(32) NOT NULL,  -- PBKDF2-HMAC-SHA256
+    Iteraciones     INT NOT NULL DEFAULT 210000,
     Activo          BIT NOT NULL DEFAULT 1,
     -- Control de fuerza bruta: la aplicacion bloquea la cuenta tras N fallos.
     IntentosFallidos INT NOT NULL DEFAULT 0,
@@ -25,14 +28,25 @@ CREATE TABLE dbo.UsuariosApp (
 );
 GO
 
-INSERT INTO dbo.UsuariosApp (Usuario, NombreCompleto, PrincipalBD, Rol, Sal, Hash) VALUES
- ('ana',     'Ana Quispe',      'cajero_ana',      'cajero',     'sal-ana-2026-0001',      HASHBYTES('SHA2_256', N'sal-ana-2026-0001' + N'Cajero_Ana_2027#')),
- ('luis',    'Luis Mamani',     'supervisor_luis', 'supervisor', 'sal-luis-2026-002',      HASHBYTES('SHA2_256', N'sal-luis-2026-002' + N'Super_Luis_2027#')),
- ('maria',   'Maria Condori',   'riesgos_maria',   'riesgos',    'sal-maria-2026-003',     HASHBYTES('SHA2_256', N'sal-maria-2026-003' + N'Riesgos_Maria_2027#')),
- ('sofia',   'Sofia Vargas',    'auditor_sofia',   'auditor',    'sal-sofia-2026-004',     HASHBYTES('SHA2_256', N'sal-sofia-2026-004' + N'Auditoria_Sofia_2027#')),
- ('admin',   'Administrador TI','dba_admin',       'dba',        'sal-admin-2026-005',     HASHBYTES('SHA2_256', N'sal-admin-2026-005' + N'Dba_Admin_2027#'));
+-- Hashes de demostracion (claves del README). Rotar con 08 antes de un uso real.
+INSERT INTO dbo.UsuariosApp (Usuario, NombreCompleto, PrincipalBD, Rol, Sal, Hash, Iteraciones) VALUES
+ ('ana',   'Ana Quispe',       'cajero_ana',      'cajero',
+  0xdcfc4272a2cd844894fe7b7b1c1a6a29, 0x94021ead9eeb4d644c34470e8931601fc91dabc8d703d02ce38c0ef0196f885f, 210000),
+ ('luis',  'Luis Mamani',      'supervisor_luis', 'supervisor',
+  0xf9204c6f590e508d9ca5e991fc004fd0, 0x8607692a2330481a28eb322f4ab33d27e6a12608a10df835d0f112066cc7c7ec, 210000),
+ ('maria', 'Maria Condori',    'riesgos_maria',   'riesgos',
+  0xaac7ab6a4fbbe78b7f38da033833d2a6, 0x16f7b19281a4bacfcfe22d938916ea01434a296be436290709544e1d461e5450, 210000),
+ ('sofia', 'Sofia Vargas',     'auditor_sofia',   'auditor',
+  0x3570411ec2859731e32c06a5b478e152, 0x5ec3b80cffda9a6087f4e8fdb071a2d6ade654cd2548ce3195150ef83c8204f7, 210000),
+ ('admin', 'Administrador TI', 'dba_admin',       'dba',
+  0x8f2816b68e6dfd9915a4528e2acaf5d1, 0x8587ffaa1b5a4c9e401275c1ce9d53459f4380ae66288e9a8fc98f82ff2de84a, 210000);
 GO
 
-SELECT Usuario, NombreCompleto, PrincipalBD, Rol, Activo, DATALENGTH(Hash) AS bytes_hash
+-- La aplicacion solo lee y actualiza el estado de las cuentas.
+GRANT SELECT, UPDATE ON dbo.UsuariosApp TO app_bancoandino;
+GO
+
+SELECT Usuario, NombreCompleto, PrincipalBD, Rol, Activo,
+       DATALENGTH(Sal) AS bytes_sal, DATALENGTH(Hash) AS bytes_hash, Iteraciones
 FROM dbo.UsuariosApp ORDER BY Rol;
 GO

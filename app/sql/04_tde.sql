@@ -31,7 +31,16 @@ GO
 ALTER DATABASE BancoAndino SET ENCRYPTION ON;
 GO
 
--- 5. Respaldar el certificado y su clave privada (sin esto no se restaura ningun backup)
+-- 5. La aplicacion puede respaldar el certificado sin ser sysadmin.
+--    CONTROL sobre el certificado alcanza para BACKUP CERTIFICATE.
+USE master;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'app_bancoandino')
+    CREATE USER app_bancoandino FOR LOGIN app_bancoandino;
+GRANT CONTROL ON CERTIFICATE::CertBancoAndino TO app_bancoandino;
+GO
+
+-- 6. Respaldar el certificado y su clave privada (sin esto no se restaura ningun backup)
 USE master;
 GO
 BACKUP CERTIFICATE CertBancoAndino
@@ -42,7 +51,7 @@ BACKUP CERTIFICATE CertBancoAndino
     );
 GO
 
--- 6. Estado
+-- 7. Estado
 SELECT DB_NAME(dek.database_id) AS base,
        dek.encryption_state_desc  AS estado,
        dek.percent_complete       AS avance,

@@ -83,6 +83,10 @@ GRANT EXECUTE ON dbo.usp_DescifrarTarjeta TO rol_cajero, rol_supervisor, rol_rie
 
 GRANT CONTROL ON CERTIFICATE::CertColumnas TO rol_riesgos;
 GRANT CONTROL ON SYMMETRIC KEY::SK_Tarjetas TO rol_riesgos;
+
+-- La aplicacion guarda tarjetas (cifra) pero no las descifra: esa
+-- operacion se ejecuta en el contexto del usuario.
+GRANT EXECUTE ON dbo.usp_GuardarTarjeta TO app_bancoandino;
 GO
 
 -- 7. Dos tarjetas de ejemplo

@@ -90,13 +90,22 @@ IF SUSER_ID('supervisor_luis') IS NOT NULL DROP LOGIN supervisor_luis;
 IF SUSER_ID('riesgos_maria')   IS NOT NULL DROP LOGIN riesgos_maria;
 IF SUSER_ID('auditor_sofia')   IS NOT NULL DROP LOGIN auditor_sofia;
 IF SUSER_ID('dba_admin')       IS NOT NULL DROP LOGIN dba_admin;
+IF SUSER_ID('app_bancoandino') IS NOT NULL DROP LOGIN app_bancoandino;
 GO
 
-CREATE LOGIN cajero_ana      WITH PASSWORD = 'Cajero_Ana_2027#',      CHECK_POLICY = OFF;
-CREATE LOGIN supervisor_luis WITH PASSWORD = 'Super_Luis_2027#',     CHECK_POLICY = OFF;
-CREATE LOGIN riesgos_maria   WITH PASSWORD = 'Riesgos_Maria_2027#',  CHECK_POLICY = OFF;
-CREATE LOGIN auditor_sofia   WITH PASSWORD = 'Auditoria_Sofia_2027#',    CHECK_POLICY = OFF;
-CREATE LOGIN dba_admin       WITH PASSWORD = 'Dba_Admin_2027#',      CHECK_POLICY = OFF;
+-- CHECK_POLICY = ON: las claves cumplen la politica del servidor. Ojo:
+-- la politica rechaza una clave que contenga el nombre del login, y eso
+-- solo se aplica en un motor con la politica activa (el contenedor Linux
+-- la aplica siempre). Por eso ninguna clave repite su login.
+-- CHECK_EXPIRATION = OFF para que la demo no caduque a los 90 dias.
+CREATE LOGIN cajero_ana      WITH PASSWORD = 'Caj3ro.Andino#27',      CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+CREATE LOGIN supervisor_luis WITH PASSWORD = 'Sup3rvisor.Andino#27',  CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+CREATE LOGIN riesgos_maria   WITH PASSWORD = 'Ri3sgos.Andino#27',    CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+CREATE LOGIN auditor_sofia   WITH PASSWORD = 'Aud1tor.Andino#27',    CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+CREATE LOGIN dba_admin       WITH PASSWORD = 'Adm1n.Andino#27',      CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
+
+-- Cuenta de conexion de la aplicacion: sin sysadmin ni db_owner.
+CREATE LOGIN app_bancoandino WITH PASSWORD = 'Apl1cacion.Andino#27',  CHECK_POLICY = ON, CHECK_EXPIRATION = OFF;
 GO
 
 CREATE USER cajero_ana      FOR LOGIN cajero_ana;
@@ -104,6 +113,7 @@ CREATE USER supervisor_luis FOR LOGIN supervisor_luis;
 CREATE USER riesgos_maria   FOR LOGIN riesgos_maria;
 CREATE USER auditor_sofia   FOR LOGIN auditor_sofia;
 CREATE USER dba_admin       FOR LOGIN dba_admin;
+CREATE USER app_bancoandino FOR LOGIN app_bancoandino;
 GO
 
 CREATE ROLE rol_cajero;
@@ -116,17 +126,35 @@ ALTER ROLE rol_cajero     ADD MEMBER cajero_ana;
 ALTER ROLE rol_supervisor ADD MEMBER supervisor_luis;
 ALTER ROLE rol_riesgos    ADD MEMBER riesgos_maria;
 ALTER ROLE rol_auditor    ADD MEMBER auditor_sofia;
-ALTER ROLE db_owner       ADD MEMBER dba_admin;
+GO
+
+-- El DBA ya no es db_owner: ve metadatos (C) pero no lee datos por si mismo.
+GRANT VIEW DEFINITION TO dba_admin;
+
+-- La aplicacion suplanta a los cinco usuarios y ejecuta solo los
+-- procedimientos que necesita. No tiene SELECT directo sobre las tablas.
+GRANT IMPERSONATE ON USER::cajero_ana      TO app_bancoandino;
+GRANT IMPERSONATE ON USER::supervisor_luis TO app_bancoandino;
+GRANT IMPERSONATE ON USER::riesgos_maria   TO app_bancoandino;
+GRANT IMPERSONATE ON USER::auditor_sofia   TO app_bancoandino;
+GRANT IMPERSONATE ON USER::dba_admin       TO app_bancoandino;
+GRANT VIEW DEFINITION TO app_bancoandino;
 GO
 
 /* ---------- 4. Permisos (minimo privilegio) ---------- */
--- Cajero: consulta clientes y transacciones; nunca empleados. Ve los datos enmascarados.
+-- Cajero: clientes y transacciones completas (enmascaradas). De empleados solo
+-- las columnas de atencion: el salario se deniega por columna.
 GRANT SELECT ON dbo.Clientes      TO rol_cajero;
 GRANT SELECT ON dbo.Transacciones TO rol_cajero;
-DENY  SELECT ON dbo.Empleados     TO rol_cajero;
+GRANT SELECT (EmpleadoID, Nombre, CI, Cargo, EmailCorporativo)
+      ON dbo.Empleados TO rol_cajero;
+DENY  SELECT (Salario) ON dbo.Empleados TO rol_cajero;
 
--- Supervisor: lo mismo que cajero, sin denegacion explicita de empleados pero sin permiso.
-GRANT SELECT ON dbo.Clientes      TO rol_supervisor;
+-- Supervisor: transacciones completas; en clientes pierde la columna de tarjeta
+-- (no la ve ni enmascarada) y conserva el resto bajo DDM.
+GRANT SELECT (ClienteID, Nombre, CI, Email, Telefono, SaldoCuenta)
+      ON dbo.Clientes TO rol_supervisor;
+DENY  SELECT (NumeroTarjeta) ON dbo.Clientes TO rol_supervisor;
 GRANT SELECT ON dbo.Transacciones TO rol_supervisor;
 
 -- Riesgos: ve todo, y por UNMASK ve los datos reales de clientes.
@@ -150,4 +178,28 @@ ORDER BY rp.name, dp.name;
 
 SELECT OBJECT_NAME(mc.object_id) AS tabla, mc.name AS columna, mc.masking_function
 FROM sys.masked_columns mc ORDER BY tabla, columna;
+
+-- Permisos por columna (minor_id > 0): GRANT y DENY que no son de tabla
+SELECT OBJECT_NAME(p.major_id) AS tabla,
+       COL_NAME(p.major_id, p.minor_id) AS columna,
+       dp.name AS principal,
+       p.permission_name AS permiso,
+       p.state_desc AS estado
+FROM sys.database_permissions p
+JOIN sys.database_principals dp ON p.grantee_principal_id = dp.principal_id
+WHERE p.class = 1 AND p.minor_id > 0
+ORDER BY tabla, columna, principal;
+GO
+
+/* ---------- 6. Cuenta de aplicacion en master ---------- */
+-- VIEW SERVER STATE: estado de TDE (DMV). VIEW DEFINITION: metadatos del
+-- certificado TDE. No se concede ningun permiso sobre datos de usuario.
+USE master;
+GO
+IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = 'app_bancoandino')
+    CREATE USER app_bancoandino FOR LOGIN app_bancoandino;
+GRANT VIEW SERVER STATE TO app_bancoandino;
+GRANT VIEW DEFINITION ON DATABASE::master TO app_bancoandino;
+GO
+USE BancoAndino;
 GO
