@@ -118,7 +118,7 @@ Las mediciones de rendimiento se reproducen con los scripts de `.tmp/` (ignorado
 ```bash
 # 1) Base y modelo (como sysadmin, en orden)
 sqlcmd -S localhost -i app/sql/01_esquema.sql
-sqlcmd -S localhost -i app/sql/02_auditoria.sql -v AuditDir='C:\\AuditLogs\\BancoAndino\\'
+sqlcmd -S localhost -i app/sql/02_auditoria.sql -v AuditDir='C:\AuditLogs\BancoAndino\'
 # … 03 a 18
 
 # 2) Claves del cliente
